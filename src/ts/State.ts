@@ -19,8 +19,21 @@ import {
   property,
   subclass,
 } from "@arcgis/core/core/accessorSupport/decorators";
-import SceneView from "@arcgis/core/views/SceneView";
-import { Device, Trail } from "./types";
+import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
+import { ArcGISView, Device, EntityId, Park, Trail, ViewMode } from "./types";
+
+function idsEqual(
+  a: EntityId | null | undefined,
+  b: EntityId | null | undefined
+): boolean {
+  return (
+    a !== null &&
+    a !== undefined &&
+    b !== null &&
+    b !== undefined &&
+    String(a) === String(b)
+  );
+}
 
 @subclass()
 export default class State extends Accessor {
@@ -28,55 +41,59 @@ export default class State extends Accessor {
   displayLoading: boolean = true;
 
   @property()
-  selectedTrailId: number = null;
+  selectedTrailId: EntityId | null = null;
 
   @property()
   selectedTrail: Trail = null;
 
-  setSelectedTrail(id: number) {
+  setSelectedTrail(id: EntityId | null) {
     this.selectedTrailId = id;
-    this.selectedTrail = this.trails.filter((trail: Trail) => {
-      return trail.id === id;
-    })[0];
-
-    if (this.selectedTrailId && this.visiblePanel !== "detailPanel") {
-      this.visiblePanel = "detailPanel";
-    }
+    this.selectedTrail = this.trails?.filter((trail: Trail) => {
+      return idsEqual(trail.id, id);
+    })[0] || null;
   }
 
   @property()
-  filteredTrailIds: Array<number> = [];
-  setFilteredTrailIds(ids: Array<number>) {
-    this.filteredTrailIds = ids;
-    // deselect trail if it is in the filtered out trails
-    if (this.filteredTrailIds.indexOf(this.selectedTrailId) === -1) {
+  selectedParkId: EntityId | null = null;
+
+  @property()
+  selectedPark: Park = null;
+
+  setSelectedPark(id: EntityId | null) {
+    this.selectedParkId = id;
+    this.selectedPark = this.parks?.filter((park: Park) => {
+      return idsEqual(park.id, id);
+    })[0] || null;
+
+    if (
+      id === null ||
+      (this.selectedTrail && !idsEqual(this.selectedTrail.parkId, id))
+    ) {
+      this.selectedTrail = null;
       this.selectedTrailId = null;
     }
   }
 
   @property()
-  filters = {};
-  setFilter(property: string, value: string | Array<number>): void {
-    this.filters = {
-      ...this.filters,
-    };
-    this.filters[property] = value;
-  }
-
-  @property()
-  visiblePanel: "selectionPanel" | "detailPanel" | "basemapPanel";
-
-  @property()
   device: Device = null;
 
   @property()
-  currentBasemapId: string = null;
+  viewMode: ViewMode = "3d";
 
   @property()
-  view: SceneView = null;
+  view: ArcGISView = null;
 
   @property()
   trails: Array<Trail> = null;
+
+  @property()
+  parks: Array<Park> = null;
+
+  @property()
+  trailsLayer: FeatureLayer = null;
+
+  @property()
+  parksLayer: FeatureLayer = null;
 
   @property()
   online: boolean = true;

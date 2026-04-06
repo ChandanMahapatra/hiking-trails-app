@@ -1,36 +1,56 @@
 import Accessor from "@arcgis/core/core/Accessor";
+import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
+import Polygon from "@arcgis/core/geometry/Polygon";
 import Polyline from "@arcgis/core/geometry/Polyline";
+import MapView from "@arcgis/core/views/MapView";
 import SceneView from "@arcgis/core/views/SceneView";
 
 export type Device = "mobilePortrait" | "desktop";
-export type Panel = "selectionPanel" | "detailPanel" | "basemapPanel";
+export type ViewMode = "3d" | "2d";
+export type ArcGISView = SceneView | MapView;
+export type EntityId = string | number;
 
 export interface State extends Accessor {
   displayLoading: boolean;
-  selectedTrailId: number;
-  setSelectedTrail: (id: number) => void;
-  filteredTrailIds: Array<number>;
-  setFilteredTrailIds: (ids: Array<number>) => void;
+  selectedTrailId: EntityId | null;
+  setSelectedTrail: (id: EntityId | null) => void;
+  selectedParkId: EntityId | null;
+  setSelectedPark: (id: EntityId | null) => void;
   selectedTrail: Trail;
-  filters: any;
-  setFilter: (property: string, value: string | number[]) => void;
-  visiblePanel: Panel;
+  selectedPark: Park;
   device: Device;
-  currentBasemapId: string;
-  view: SceneView;
+  viewMode: ViewMode;
+  view: ArcGISView;
   trails: Array<Trail>;
+  parks: Array<Park>;
+  trailsLayer: FeatureLayer | null;
+  parksLayer: FeatureLayer | null;
   online: boolean;
 }
 
 export interface Trail {
   geometry: Polyline;
+  objectId: EntityId;
   name: string;
-  id: number;
-  difficulty: string;
-  category: string;
-  walktime: number;
-  status: number;
-  ascent: number;
-  description: number;
-  hasZ: boolean;
+  parkId: EntityId | null;
+  id: EntityId;
+  difficulty?: string;
+  category?: string;
+  walktime?: number;
+  status?: string;
+  ascent?: number;
+  description?: string;
+  surface?: string;
+  trailType?: string;
+  trailClass?: string;
+  trailUse?: string;
+  seasonalDescription?: string;
+}
+
+export interface Park {
+  geometry: Polygon;
+  objectId: EntityId;
+  id: EntityId;
+  name: string;
+  unitType?: string;
 }

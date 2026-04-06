@@ -14,278 +14,203 @@
  *
  */
 
-import config from "../config";
-import noUiSlider from "nouislider";
 import "../../style/selection-panel.scss";
-import "../../style/nouislider.scss";
-import { State, Trail } from "../types";
+import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
+import { EntityId, State } from "../types";
 
 export default class SelectionPanel {
-  trailsPanel: HTMLElement;
-  filterPanel: HTMLElement;
-  trails: Array<Trail>;
+  parkSelect: HTMLElement;
+  trailSelect: HTMLElement;
+  modeSwitch: any;
   state: State;
-  container: any;
+  private suppressComboboxEvents: boolean;
 
-  constructor(trails, state: State) {
+  constructor(state: State) {
     this.state = state;
-    this.trails = trails;
+    this.suppressComboboxEvents = false;
+    this.parkSelect = document.getElementById("parkSelect");
+    this.trailSelect = document.getElementById("trailSelect");
+    this.modeSwitch = document.getElementById("viewModeToggle");
 
-    this.container = document.getElementById("selectionPanel");
-
-    this.trailsPanel = document.getElementById("trailsPanel");
-    this.generateTrailsPanel();
-
-    document.querySelector(".removeSelected").addEventListener("click", () => {
-      this.state.setSelectedTrail(null);
-    });
-
-    this.filterPanel = document.getElementById("filterPanel");
-    this.generateFilterPanel();
-
-    state.watch("selectedTrailId", (id) => {
-      if (document.querySelector(".selected")) {
-        document.querySelector(".selected").classList.remove("selected");
+    const initializeComboboxes = () => {
+      if (!this.parkSelect || !this.trailSelect) {
+        return;
       }
-      if (id) {
-        document.querySelector(`[data-id ="${id}"]`).classList.add("selected");
-        document.querySelector(".removeSelected").removeAttribute("disabled");
-      } else {
-        document.querySelector(".removeSelected").setAttribute("disabled", "");
-      }
-    });
-
-    state.watch("filters", (filters: any) => {
-      const filteredTrailIds = this.getFilteredTrails(filters).map(
-        (trail) => trail.id
-      );
-      this.state.setFilteredTrailIds(filteredTrailIds);
-    });
-
-    state.watch("filteredTrailIds", (ids) => {
-      this.updateVisibleTrails(ids);
-    });
-  }
-
-  private getFilteredTrails(filters: any): Array<Trail> {
-    const filteredTrails = this.trails.filter((trail) => {
-      // we assume the trail will not be filtered out
-      let keepTrail = true;
-
-      // go through each filter criteria and verify if the trail should be filtered out
-      for (const filter in filters) {
-        if (Array.isArray(filters[filter])) {
-          if (
-            trail[filter] < filters[filter][0] ||
-            trail[filter] > filters[filter][1]
-          ) {
-            keepTrail = false;
-            break;
-          }
-        } else {
-          if (filters[filter] !== "All") {
-            if (trail[filter].toString() !== filters[filter]) {
-              keepTrail = false;
-              break;
-            }
-          }
-        }
-      }
-
-      return keepTrail;
-    });
-
-    return filteredTrails;
-  }
-
-  private updateVisibleTrails(ids) {
-    const trailElements = document.querySelectorAll(".trail");
-    [].forEach.call(trailElements, function (elem) {
-      if (ids.indexOf(parseInt(elem.dataset.id, 10)) === -1) {
-        elem.classList.add("disabled");
-      } else {
-        elem.classList.remove("disabled");
-      }
-    });
-  }
-
-  private generateTrailsPanel(): void {
-    const state = this.state;
-
-    this.trails.forEach((trail) => {
-      const trailElement = document.createElement("div");
-      trailElement.className = "trail";
-      trailElement.innerHTML = trail.name;
-      trailElement.dataset.difficulty = trail.difficulty;
-      trailElement.dataset.id = String(trail.id);
-      trailElement.dataset.category = trail.category;
-      trailElement.dataset.walktime = String(trail.walktime);
-      trailElement.dataset.status = String(trail.status);
-      trailElement.dataset.ascent = String(trail.ascent);
-      this.trailsPanel.appendChild(trailElement);
-
-      trailElement.addEventListener("click", (evt) => {
-        state.setSelectedTrail(
-          parseInt((evt.target as HTMLElement).dataset.id, 10)
-        );
+      this.withSuppressedComboboxEvents(() => {
+        this.populateParkOptions();
+        this.populateTrailOptions();
       });
-    });
-  }
-
-  private generateFilterPanel(): void {
-    this.generateSingleChoiceFilters();
-    this.generateRangeFilters();
-  }
-
-  // create radio buttons for single choice filter criteria
-  private generateSingleChoiceFilters(): void {
-    const singleChoiceFilters: Array<string> =
-      config.data.filterOptions.singleChoice;
-
-    for (const filter of singleChoiceFilters) {
-      // get unique values for the single choice options
-      const uniqueValues = this.getUniqueValues(filter);
-
-      // create a single choice options text so that users know what to select
-      const text = filter.charAt(0).toUpperCase() + filter.slice(1);
-
-      const filterCategory = document.createElement("div");
-      filterCategory.className = "filter-category";
-      filterCategory.innerHTML = text;
-      this.filterPanel.appendChild(filterCategory);
-
-      // add options as radio buttons
-      const spanContainer = document.createElement("span");
-      spanContainer.className = "radio-group";
-      this.filterPanel.appendChild(spanContainer);
-
-      for (let i = 0; i < uniqueValues.length; i++) {
-        const checked = i === 0 ? "checked" : "";
-        const id = `${filter}-${uniqueValues[i]}`;
-        const radioOption = `<input type="radio" id="${id}" name=${filter} ${checked}/><label for="${id}" data-group="${filter}" data-option="${uniqueValues[i]}">${uniqueValues[i]}</label>`;
-        spanContainer.innerHTML += radioOption;
-      }
-
-      // initialize state
-      this.state.setFilter(filter, "All");
-
-      spanContainer.addEventListener("click", (evt) => {
-        const target = evt.target as HTMLElement;
-        if (target.localName === "label") {
-          this.state.setFilter(target.dataset.group, target.dataset.option);
-        }
-      });
-    }
-  }
-
-  // function that gets unique values for a trail attribute (filter)
-  private getUniqueValues(filter): Array<string> {
-    const uniqueValues = ["All"];
-
-    this.trails.forEach((elem) => {
-      if (uniqueValues.indexOf(elem[filter]) === -1) {
-        uniqueValues.push(elem[filter]);
-      }
-    });
-
-    return uniqueValues;
-  }
-
-  // creates range sliders for interval type filter criteria
-  private generateRangeFilters(): void {
-    const rangeFilters: Array<string> = config.data.filterOptions.range;
-    const state: State = this.state;
-
-    for (const filter of rangeFilters) {
-      const text = filter.charAt(0).toUpperCase() + filter.slice(1);
-
-      const filterCategory = document.createElement("div");
-      filterCategory.className = "filter-category";
-      filterCategory.innerHTML = text;
-      this.filterPanel.appendChild(filterCategory);
-
-      // get minimum and maximum for the filter criteria
-      const extremes: Extremes = this.getExtremes(filter);
-      let unit: string = "",
-        step: number = 1;
-
-      switch (filter) {
-        case "walktime": {
-          unit = "hrs";
-          step = 1;
-          break;
-        }
-        case "ascent": {
-          unit = "m";
-          step = 50;
-          break;
-        }
-      }
-
-      const span = document.createElement("div");
-      span.innerHTML = `${extremes.min} ${unit}`;
-      this.filterPanel.appendChild(span);
-
-      const rangeSliderContainer = document.createElement("div");
-      rangeSliderContainer.className = "range-slider";
-      rangeSliderContainer.dataset.group = filter;
-      this.filterPanel.appendChild(rangeSliderContainer);
-
-      const format = {
-        to: (value: number): string | number => {
-          return `${parseInt(String(value), 10)} ${unit}`;
-        },
-        from: (value: string): number | false => {
-          return parseInt(value, 10);
-        },
-      };
-
-      noUiSlider.create(rangeSliderContainer, {
-        start: [extremes.min, extremes.max],
-        range: {
-          min: extremes.min,
-          max: extremes.max,
-        },
-        connect: true,
-        step: step,
-        tooltips: [format, format],
-      });
-
-      //initialize state
-      state.setFilter(filter, [extremes.min, extremes.max]);
-
-      //add event listener on slider to change the state when slider values change
-      (rangeSliderContainer as any).noUiSlider.on("end", function (values) {
-        state.setFilter(this.target.dataset.group, values);
-      });
-
-      const span2 = document.createElement("div");
-      span2.innerHTML = `${extremes.max} ${unit}`;
-      this.filterPanel.appendChild(span2);
-    }
-  }
-
-  private getExtremes(prop): Extremes {
-    let min = 1000,
-      max = 0;
-    this.trails.forEach(function (elem) {
-      if (elem[prop] !== null) {
-        if (elem[prop] < min) {
-          min = elem[prop];
-        }
-        if (elem[prop] > max) {
-          max = elem[prop];
-        }
-      }
-    });
-    return {
-      min: min,
-      max: max,
     };
-  }
-}
 
-interface Extremes {
-  min: number;
-  max: number;
+    queueMicrotask(initializeComboboxes);
+    window.setTimeout(initializeComboboxes, 0);
+    window.setTimeout(initializeComboboxes, 500);
+    this.whenCalciteReady().then(initializeComboboxes);
+
+    this.parkSelect.addEventListener("calciteComboboxChange", () => {
+      if (this.suppressComboboxEvents) return;
+      this.state.setSelectedPark(this.readSelectedId(this.parkSelect));
+    });
+
+    this.trailSelect.addEventListener("calciteComboboxChange", () => {
+      if (this.suppressComboboxEvents) return;
+      this.state.setSelectedTrail(this.readSelectedId(this.trailSelect));
+    });
+
+    this.modeSwitch?.addEventListener("calciteSwitchChange", () => {
+      this.state.viewMode = this.modeSwitch.checked ? "2d" : "3d";
+    });
+
+    reactiveUtils.watch(() => state.selectedParkId, () => {
+      this.withSuppressedComboboxEvents(() => {
+        this.syncSelection(this.parkSelect, this.state.selectedParkId);
+        this.populateTrailOptions();
+      });
+    });
+
+    reactiveUtils.watch(() => state.parks, () => {
+      this.withSuppressedComboboxEvents(() => {
+        this.populateParkOptions();
+        this.populateTrailOptions();
+      });
+    });
+
+    reactiveUtils.watch(() => state.trails, () => {
+      this.withSuppressedComboboxEvents(() => {
+        this.populateTrailOptions();
+      });
+    });
+
+    reactiveUtils.watch(() => state.selectedTrailId, () => {
+      this.withSuppressedComboboxEvents(() => {
+        this.syncSelection(this.trailSelect, this.state.selectedTrailId);
+      });
+    });
+
+    reactiveUtils.watch(() => state.viewMode, (viewMode) => {
+      if (this.modeSwitch) {
+        this.modeSwitch.checked = viewMode === "2d";
+      }
+    });
+  }
+
+  private withSuppressedComboboxEvents(callback: () => void) {
+    this.suppressComboboxEvents = true;
+    try {
+      callback();
+    } finally {
+      this.suppressComboboxEvents = false;
+    }
+  }
+
+  /** Defer until calcite-combobox-item custom element is registered. */
+  private async whenCalciteReady(): Promise<void> {
+    if (!customElements.get("calcite-combobox-item")) {
+      await customElements.whenDefined("calcite-combobox-item");
+    }
+  }
+
+  private populateParkOptions() {
+    const parks = this.state.parks || [];
+    this.removeAllItems(this.parkSelect);
+
+    parks.forEach((park) => {
+      this.parkSelect.appendChild(this.createComboboxItem(park.id, park.name));
+    });
+
+    this.syncSelection(this.parkSelect, this.state.selectedParkId);
+    this.setDisabled(this.parkSelect, parks.length === 0);
+  }
+
+  private populateTrailOptions() {
+    const trails = this.state.trails || [];
+    const selectedParkId = this.state.selectedParkId;
+
+    // Keep the trail combobox disabled until a park is selected so the
+    // component isn't overwhelmed with thousands of items.
+    if (selectedParkId === null || selectedParkId === undefined) {
+      this.removeAllItems(this.trailSelect);
+      this.setDisabled(this.trailSelect, true);
+      return;
+    }
+
+    const filtered = trails.filter((t) => String(t.parkId) === String(selectedParkId));
+
+    this.removeAllItems(this.trailSelect);
+
+    filtered.forEach((trail) => {
+      const trailLabel = String(trail.name || "").trim() || `Trail ${trail.id}`;
+      this.trailSelect.appendChild(this.createComboboxItem(trail.id, trailLabel));
+    });
+
+    this.setDisabled(this.trailSelect, filtered.length === 0);
+
+    // Deselect an active trail that is no longer in the current list.
+    if (
+      this.state.selectedTrailId !== null &&
+      !filtered.some((t) => String(t.id) === String(this.state.selectedTrailId))
+    ) {
+      this.state.setSelectedTrail(null);
+    }
+
+    this.syncSelection(this.trailSelect, this.state.selectedTrailId);
+  }
+
+  /** Use attribute-based disabled so Calcite reflects the state correctly. */
+  private setDisabled(combobox: HTMLElement, disabled: boolean) {
+    (combobox as any).disabled = disabled;
+    if (disabled) {
+      combobox.setAttribute("disabled", "");
+    } else {
+      combobox.removeAttribute("disabled");
+    }
+  }
+
+  /** Read the currently selected combobox item's value as a string/number or null. */
+  private readSelectedId(combobox: HTMLElement): EntityId | null {
+    const selected = (combobox as any).selectedItems as any[] | undefined;
+    const comboboxValue = (combobox as any).value;
+
+    if (!selected || selected.length === 0) {
+      if (comboboxValue === null || comboboxValue === undefined || comboboxValue === "") {
+        return null;
+      }
+      return comboboxValue;
+    }
+
+    const raw = selected[0].value ?? selected[0].getAttribute("value") ?? comboboxValue;
+    if (!raw && raw !== 0) return null;
+    return raw;
+  }
+
+  private createComboboxItem(id: EntityId, label: string) {
+    const item = document.createElement("calcite-combobox-item") as any;
+    const normalizedLabel = String(label).trim() || `Trail ${id}`;
+
+    item.setAttribute("value", String(id));
+    item.setAttribute("heading", normalizedLabel);
+    item.setAttribute("label", normalizedLabel);
+    item.value = String(id);
+    item.heading = normalizedLabel;
+    item.label = normalizedLabel;
+
+    return item;
+  }
+
+  /** Set the `selected` JS property on the matching item; clear all others. */
+  private syncSelection(combobox: HTMLElement, selectedId: EntityId | null) {
+    const target = selectedId === null ? null : String(selectedId);
+    combobox.querySelectorAll("calcite-combobox-item").forEach((item: any) => {
+      const itemValue = item.value ?? item.getAttribute("value");
+      item.selected = target !== null && String(itemValue) === target;
+    });
+  }
+
+  /** Remove child items and reset the combobox's internal shadow-DOM state. */
+  private removeAllItems(combobox: HTMLElement) {
+    const items = Array.from(combobox.querySelectorAll("calcite-combobox-item"));
+    items.forEach((item) => combobox.removeChild(item));
+    // Clear Calcite's internal value so the previous chip/text is not retained.
+    (combobox as any).value = "";
+  }
 }

@@ -16,109 +16,62 @@
 
 import DetailPanel from "./DetailPanel";
 import SelectionPanel from "./SelectionPanel";
-import BasemapPanel from "./BasemapPanel";
-import { Panel, State } from "../types";
-import WebScene from "@arcgis/core/WebScene";
+import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
+import { State } from "../types";
 
 import "../../style/menu-panel.scss";
 
 export default class MenuPanel {
   state: State;
   container: HTMLElement;
+  loadingContainer: HTMLElement;
+  loadingIndicator: HTMLElement;
+  loadingMessage: HTMLElement;
+  parkField: HTMLElement;
+  trailField: HTMLElement;
 
   constructor(state: State) {
-    const trails = state.trails;
     this.state = state;
     this.container = <HTMLElement>document.querySelector(".menuPanel");
+    this.loadingContainer = document.getElementById("selectionLoading");
+    this.loadingIndicator = document.getElementById("selectionLoader");
+    this.loadingMessage = document.getElementById("selectionLoadingMessage");
+    this.parkField = document.getElementById("parkSelectLabel");
+    this.trailField = document.getElementById("trailSelectLabel");
 
-    const selectionPanel = new SelectionPanel(trails, state);
-    const detailPanel = new DetailPanel(trails, state);
-    const basemapPanel = new BasemapPanel(state);
+    new SelectionPanel(state);
+    new DetailPanel(state);
 
-    const panels = {
-      selectionPanel,
-      detailPanel,
-      basemapPanel,
+    const syncLoadingState = () => {
+      if (!this.loadingContainer || !this.loadingIndicator || !this.loadingMessage) {
+        return;
+      }
+
+      const hasParks = (this.state.parks?.length || 0) > 0;
+      const hasTrails = (this.state.trails?.length || 0) > 0;
+      const isLoading = this.state.displayLoading;
+      const showLoader = isLoading && !hasParks;
+      const showEmptyState = !isLoading && !hasParks && !hasTrails;
+
+      this.loadingContainer.hidden = !(showLoader || showEmptyState);
+      this.loadingContainer.classList.toggle("is-empty", showEmptyState);
+      this.loadingIndicator.toggleAttribute("hidden", !showLoader);
+      this.parkField?.toggleAttribute("hidden", showLoader || showEmptyState);
+      this.trailField?.toggleAttribute("hidden", showLoader || showEmptyState);
+      this.loadingMessage.textContent = showLoader
+        ? "Loading park and trail names..."
+        : "Park and trail data is not available yet. Try reloading once the web map finishes loading.";
     };
 
-    this.initVisiblePanel(panels);
+    syncLoadingState();
 
-    state.watch("visiblePanel", (newPanel, oldPanel) => {
-      // activate the selected panel (newPanel)
-      document
-        .querySelector(`[data-tab="${newPanel}"]`)
-        .classList.add("active");
-      panels[newPanel].container.style.display = "block";
-
-      // deactivate the old active panel (oldPanel)
-      document
-        .querySelector(`[data-tab="${oldPanel}"]`)
-        .classList.remove("active");
-      panels[oldPanel].container.style.display = "none";
-    });
-
-    document.querySelector(".menuTabs").addEventListener("click", (evt) => {
-      this.state.visiblePanel = (evt.target as HTMLElement).dataset
-        .tab as Panel;
-    });
-
-    // this class also takes care of the mobile menu
-    document.querySelector("#home").addEventListener("click", (evt) => {
-      const view = this.state.view;
-      if (view.map instanceof WebScene) {
-        view.goTo(view.map.initialViewProperties.viewpoint);
-        this.state.selectedTrailId = null;
-      }
-    });
-
-    document.getElementById("about").addEventListener("click", function () {
-      document.getElementById("credentialsPanel").style.display = "inline";
-    });
-    document.getElementById("close").addEventListener("click", function () {
-      document.getElementById("credentialsPanel").style.display = "none";
-    });
-
-    state.watch("device", () => {
-      if (this.state.device === "mobilePortrait") {
-        this.state.visiblePanel = "detailPanel";
-
-        if (!this.state.selectedTrailId) {
-          this.container.style.display = "none";
-        } else {
-          this.container.style.display = "flex";
-        }
-      } else {
-        if (!this.state.selectedTrailId) {
-          this.state.visiblePanel = "selectionPanel";
-        }
-        this.container.style.display = "flex";
-      }
-    });
-
-    state.watch("selectedTrailId", () => {
-      if (this.state.device === "mobilePortrait") {
-        if (this.state.selectedTrailId) {
-          this.container.style.display = "flex";
-        } else {
-          this.container.style.display = "none";
-        }
-      }
-    });
-
-    document.querySelector("#details").addEventListener("click", (evt) => {
-      const displayValue = this.container.style.display;
-      console.log(displayValue);
-      this.container.style.display =
-        displayValue === "none" || displayValue === "" ? "flex" : "none";
-    });
-  }
-
-  private initVisiblePanel(panels) {
-    if (this.state.device === "mobilePortrait") {
-      this.state.visiblePanel = "detailPanel";
-    } else {
-      this.state.visiblePanel = "selectionPanel";
-    }
-    panels[this.state.visiblePanel].container.style.display = "block";
+    reactiveUtils.watch(
+      () => ({
+        loading: state.displayLoading,
+        parkCount: state.parks?.length || 0,
+        trailCount: state.trails?.length || 0,
+      }),
+      syncLoadingState
+    );
   }
 }

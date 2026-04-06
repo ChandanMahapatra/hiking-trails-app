@@ -22,7 +22,8 @@
     "vite": "^5.4.2"
   },
   "dependencies": {
-    "@arcgis/core": "^4.30.9",
+    "@arcgis/core": "^4.34.0",
+    "@esri/calcite-components": "^5.0.2",
     "nouislider": "^15.8.1"
   }
 }

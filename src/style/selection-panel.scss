@@ -1,117 +1,51 @@
 @import 'variables';
 
-#trailsPanel {
-  margin-bottom: 10px;
+#selectionPanel {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 14px;
 
-  .trail {
-    background-color: $green;
-    border: 1px solid $green;
-    margin: 5px 5px 5px 0;
-    cursor: pointer;
-    pointer-events: auto;
-    padding: 4px 8px;
-    font-size: $normal-font;
+  .panelLoading {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--calcite-ui-border-2, rgba(100, 100, 100, 0.3));
+    border-radius: 10px;
+    background-color: var(--calcite-ui-foreground-2, rgba(255, 255, 255, 0.65));
 
-    &.disabled {
-      cursor: default;
-      background-color: white;
-      border: 1px solid $disabled-gray;
-      color: $disabled-gray;
-      pointer-events: none;
+    &[hidden] {
+      display: none;
     }
 
-    &.disabled:hover {
-      cursor: default;
-      border: 1px solid $disabled-gray;
-      color: $disabled-gray;
+    &.is-empty {
+      background-color: var(--calcite-ui-background, rgba(245, 245, 245, 0.9));
     }
 
-    &.selected {
-      background-color: $orange;
-      border: 1px solid $orange;
+    p {
+      margin: 0;
+      font-size: var(--calcite-font-size--1, 0.9rem);
+      line-height: var(--calcite-line-height-1, 1.4);
+      color: var(--calcite-ui-text-2, rgb(80, 80, 80));
     }
   }
 
-  .trail:hover {
-    background-color: $orange;
-    border: 1px solid $orange;
-  }
-
-}
-
-.removeSelected {
-  background: none;
-  border: none;
-  border-bottom: 1px dashed $font-color;
-  color: $font-color;
-  font-family: 'Open Sans Condensed';
-  font-size: $normal-font;
-  line-height: $normal-font;
-  padding: 0;
-  cursor: pointer;
-
-  &:disabled {
-    border-bottom: 1px dashed $disabled-gray;
-    color: $disabled-gray;
-    cursor: default;
-  }
-}
-
-
-#filterPanel {
-
-  overflow: hidden;
-  padding-bottom: 10px;
-
-  .filter-category {
-    font-size: $small-font;
+  calcite-label {
+    font-size: var(--calcite-font-size--1, 0.9rem);
     font-weight: bold;
-    padding: 20px 0;
+    color: var(--calcite-ui-text-1, rgb(50, 50, 50));
   }
 
-  input[type=radio] {
-    position: absolute;
-    visibility: hidden;
-    display: none;
-    pointer-events: none;
+  calcite-combobox {
+    width: 100%;
+    margin-top: 6px;
   }
 
-  label {
-    display: inline-block;
-    cursor: pointer;
-    padding: 5px 10px;
-    &:hover {
-      background: $green;
-    }
-  }
-
-  input[type=radio]:checked + label{
-    background: $green;
-  }
-
-  label + input[type=radio] + label {
-    border-left: solid 1px $green;
-  }
-
-  .radio-group {
-    border: solid 1px $green;
-    display: inline-block;
-  }
-
-  .range-slider {
-    display: inline-block;
-    width: 200px;
-    margin: 0 15px;
-  }
-
-  .noUi-tooltip {
-    display: none;
-  }
-
-  .noUi-active .noUi-tooltip {
-      display: block;
+  #detailPanel {
+    margin-top: 6px;
+    border-top: 1px solid var(--calcite-ui-border-2, rgba(100, 100, 100, 0.75));
+    padding-top: 14px;
   }
 }
 

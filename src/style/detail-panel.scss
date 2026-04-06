@@ -2,10 +2,12 @@
 @import 'variables';
 
 #detailPanel {
-  overflow-y: auto;
+  overflow: visible;
 
-  h1 {
+  h3 {
     padding-top: 0;
+    text-align: left;
+    padding: 0;
   }
 
   #detailElevationProfile {
@@ -14,13 +16,14 @@
   }
 
   #detailDescription {
-    margin: 20px;
-    line-height: $big-font;
+    margin: 12px 0;
+    line-height: var(--calcite-line-height-1, 1.4);
+    color: var(--calcite-ui-text-2, rgb(50, 50, 50));
   }
 
   #detailInfograph {
-    padding-top: 10px;
-    text-align: center;
+    padding-top: 8px;
+    text-align: left;
 
     .infograph {
       padding: 5px;
@@ -30,11 +33,11 @@
     }
 
     .fa-calendar-times-o {
-      color: #d98c8c;
+      color: var(--calcite-ui-danger, #d98c8c);
     }
 
     .fa-calendar-check-o {
-      color: #7dad7c;
+      color: var(--calcite-ui-success, #7dad7c);
     }
   }
 
@@ -46,14 +49,14 @@
 
 @media (max-width: $max-width) {
   #detailPanel {
-    h1 {
+    h3 {
       text-align: left;
-      padding: 10px 0 10px 20px;
+      padding: 0;
     }
 
     #detailInfograph {
       text-align: left;
-      padding-left: 20px;
+      padding-left: 0;
     }
 
     #detailDescription {

@@ -1,6 +1,8 @@
-# Hiking trails Swiss National Park
+# Hiking Trails Explorer
 
-This application displays the hiking trails in the [Swiss National Park](http://www.nationalpark.ch/en/). The Swiss National Park is the most highly preserved area in Switzerland and it is a beloved place to go hiking.
+This application explores hiking trails across U.S. National Parks using the ArcGIS Maps SDK for JavaScript and a configured ArcGIS WebMap. The experience opens in 3D, offers an optional 2D switch, and keeps the sidebar focused on park and trail selection, trail details, and the live elevation profile for the active route.
+
+This app is based on [Esri's hiking-trails-app](https://github.com/Esri/hiking-trails-app) by [Raluca Nicola](https://github.com/RalucaNicola).
 
 [View it live](https://esri.github.io/hiking-trails-app)
 
@@ -8,31 +10,84 @@ This application displays the hiking trails in the [Swiss National Park](http://
 
 ## Features
 
-* Displaying hikes on a 3D map along with the altitude profile, descriptions and images. The altitude profile is automatically generated from the elevation service used in the map. The images are a selection of images marked under creative-commons license from Flickr.
+* Browse U.S. National Parks and their hiking trails from two searchable Calcite comboboxes. Trail options stay scoped to the selected park, and the detail panel shows available trail facts plus a live elevation profile.
 
-* The hikes can be filtered by Difficulty, Category, Walktime and Ascent. These categories are used to describe the degree of difficulty of the trails, according to the [Swiss National Park description](http://www.nationalpark.ch/en/visit/trails-routes).
+* Start in a 3D `SceneView` and switch to a 2D `MapView` while preserving the current park and trail context when practical. Basemap switching uses the official ArcGIS JavaScript API `BasemapGallery` widget.
+
+* Infer park and trail layers from the loaded web map at runtime instead of hard-coding service URLs or field names. The app prefers join fields such as `UNIT_CODE`, `UNITCODE`, `UNIT_ID`, and `PARK_ID`, and falls back to spatial association when those joins are missing.
+
+* Filter the park list to actual National Parks when designation metadata such as `UNIT_TYPE` is available, and keep map selection focused by filtering to the selected park and trail while preserving highlight graphics.
+
+## Recent updates
+
+* Park selection rendering now suppresses the selected source polygon symbology and relies on a dedicated highlight graphics layer, so selected parks remain outline-only even when zoomed in.
+
+* The elevation profile flow now validates selected trail geometry before widget creation. The selected trail is converted into an ArcGIS `Graphic`, and incomplete or invalid polyline inputs show a concise in-panel fallback instead of failing silently.
+
+* Trail and park initialization now retries briefly while the web map and inferred layers finish loading. The sidebar loader and empty-state messaging stay in sync with that initialization path.
+
+* Active park and trail selections are reapplied after 3D/2D view switches, and the elevation profile is rebuilt against the current view so the panel remains consistent across mode changes.
+
+## Maps and layers used
+
+The default map configuration in [src/ts/config.ts](./src/ts/config.ts) points to ArcGIS WebMap item `5a94b21ff6e94d10ae61483c392bbf9b`.
+
+The app loads that web map once and uses it for both 3D and 2D views:
+
+* `SceneView` is the default experience.
+* `MapView` is available from the header toggle for a 2D route and map view.
+* The Home button uses a U.S.-wide starting viewpoint so the app opens with national context.
+
+Park and trail layers are resolved dynamically from the web map at runtime:
+
+* Park layers are inferred from polygon feature layers with park, boundary, reserve, or national signals in their titles, URLs, display fields, or field names.
+* Trail layers are inferred from polyline feature layers with trail, route, or hike signals.
+* Trail and park IDs and names are derived heuristically from available fields rather than fixed schema assumptions.
+* When a park layer exposes designation metadata such as `UNIT_TYPE`, the UI narrows the park list to National Parks only.
+* When a trail-to-park join field is unavailable, the app falls back to spatial intersection so trails can still be associated with parks.
+
+Because the app intentionally infers layers from the configured web map, you can repoint it to a different compatible map without rewriting fixed layer URLs throughout the UI.
+
+## Current implementation notes
+
+* The app keeps selected-only visibility by filtering the source park and trail layers to the active object IDs while rendering the visible highlight styling from a separate graphics layer.
+
+* Park highlighting is intentionally outline-first. When a trail is also selected, the park outline becomes faint so the trail highlight remains visually dominant.
+
+* Trail detail fallbacks prefer concise values from inferred attributes such as surface, use, type, and seasonal description, while the ArcGIS `ElevationProfile` widget remains the source of elevation information.
+
+* Layer inference is biased toward the current NPS boundary layer because it exposes `UNIT_CODE` and `UNIT_TYPE`, which are needed for National Park filtering and park-to-trail association.
 
 ## Instructions
 
 1. Fork and then clone the repo.
 2. Install dependencies with `npm install`.
-3. Update the [config](./src/ts/config.ts) file with your services/data.
+3. Review the [config](./src/ts/config.ts) file if you want to point the app at a different ArcGIS WebMap item or adjust selection colors.
 4. Start the development app with `npm run start`.
-5. The production app can be created with `npm run build`.
+5. Validate types with `npm run type-check`.
+6. Create a production build with `npm run build`.
 
 ## Requirements
 
-* Notepad or your favorite HTML editor
-* Web browser with access to the Internet
+* Node.js and npm
+* A modern web browser with access to the Internet and ArcGIS web resources
 
 ## Resources
 
-The following libraries, APIs and datasets  were used to make this application:</p>
+The following libraries, APIs, and data sources are used by this application:
 
-* Hiking trails geometry and attributes data from the [Swiss National Park](http://www.nationalpark.ch/en/visit/trails-routes).
-* [ArcGIS API for JavaScript](https://developers.arcgis.com/javascript/) for the map.
-* This application uses the <a href="https://www.flickr.com/services/api/" target="_blank">Flickr API</a> but is not endorsed or certified by <a href="https://www.flickr.com/" target="_blank">Flickr</a>. Flickr API is used to retrieve building images under <a href="https://creativecommons.org/licenses/" target="_blank">Creative Commons licenses</a>. See <a href="https://www.flickr.com/services/api/tos/" target="_blank">Flickr Terms of Use</a> for licensing information.
-* [amcharts](https://github.com/amcharts) for the altitude profile.
+* [ArcGIS Maps SDK for JavaScript 4.34](https://developers.arcgis.com/javascript/) for the map, views, widgets, feature querying, and elevation profile.
+* [Calcite Components](https://developers.arcgis.com/calcite-design-system/) for the searchable park and trail comboboxes and header controls.
+* ArcGIS WebMap item `5a94b21ff6e94d10ae61483c392bbf9b` as the default map source.
+* Park and trail feature layers supplied by that web map and inferred at runtime from layer geometry, titles, URLs, display fields, and field names.
+* ArcGIS `ElevationProfile` widget for the selected trail's live elevation profile.
+
+## Validation status
+
+The current implementation has been validated with:
+
+* `npm run type-check`
+* `npm run build`
 
 ## Disclaimer
 

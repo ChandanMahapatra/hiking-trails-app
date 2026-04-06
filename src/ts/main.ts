@@ -16,24 +16,62 @@
 
 import "../style/reset.scss";
 import "../style/style.scss";
+import "@esri/calcite-components/main.css";
+import { defineCustomElements } from "@esri/calcite-components/loader";
+
+defineCustomElements(window);
 
 import esriConfig from "@arcgis/core/config";
-esriConfig.request.useIdentity = false;
+import config from "./config";
+if ((config as any).apiKey) {
+  esriConfig.apiKey = (config as any).apiKey;
+}
 
 import trailManager from "./data/trailManager";
 import SceneElement from "./scene/SceneElement";
 import State from "./State";
 import ConnectionManager from "./ui/ConnectionManager";
 import deviceUtils from "./ui/deviceUtils";
-import LoadingPage from "./ui/LoadingPage";
 import MenuPanel from "./ui/MenuPanel";
 
 const state = new State();
 deviceUtils.init(state);
 new ConnectionManager(state);
-new LoadingPage(state);
-new SceneElement(state);
+const sceneElement = new SceneElement(state);
 
-trailManager.initTrails(state).then(() => {
-  new MenuPanel(state);
+let uiInitialized = false;
+
+const initializeUi = async () => {
+  state.displayLoading = true;
+
+  if (!uiInitialized) {
+    new MenuPanel(state);
+    uiInitialized = true;
+  }
+
+  try {
+    const maxAttempts = 20;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await trailManager.initTrails(state);
+        if ((state.parks?.length || 0) > 0 && (state.trails?.length || 0) > 0) {
+          return;
+        }
+      } catch (error) {
+        console.warn(`Trail initialization attempt ${attempt} failed.`, error);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    console.warn("Trail initialization completed without loaded park/trail data.");
+  } finally {
+    state.displayLoading = false;
+  }
+};
+
+void initializeUi();
+
+sceneElement.ready.catch((error) => {
+  console.warn("Scene initialization failed, continuing with degraded behavior.", error);
 });

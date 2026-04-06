@@ -25,7 +25,7 @@ import UniqueValueInfo from "@arcgis/core/renderers/support/UniqueValueInfo";
 
 export function getTrailRenderer(): UniqueValueRenderer {
   return new UniqueValueRenderer({
-    field: config.data.trailAttributes.id,
+    field: "OBJECTID",
     defaultSymbol: createTrailSymbol({
       selection: null,
     }),
@@ -110,11 +110,11 @@ export function createLabelClass(options) {
     }),
     labelPlacement: "above-center",
     labelExpressionInfo: {
-      expression: `$feature.${config.data.trailAttributes.name}`,
+      expression: "$feature.OBJECTID",
     },
   });
   if (options.selection) {
-    labelClass.where = `${config.data.trailAttributes.id} = ${options.selection}`;
+    labelClass.where = `OBJECTID = ${options.selection}`;
   }
 
   return labelClass;

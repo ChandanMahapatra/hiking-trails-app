@@ -3,71 +3,44 @@
 .menuPanel {
   position: absolute;
   left: 0;
-  top: 0;
+  top: 56px;
   bottom: 0;
-  width: 350px;
-  background-color: $background-color;
-  box-shadow: 0px 0px 2px 1px $delimiter;
+  width: 360px;
+  background-color: var(--calcite-ui-foreground-1, rgba(255, 255, 255, 0.9));
+  box-shadow: 0px 0px 2px 1px var(--calcite-ui-border-2, rgba(100, 100, 100, 0.75));
   z-index: 10;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 
   .panel {
-    display: none;
+    display: block;
     width: 100%;
     padding: 20px;
     box-sizing: border-box;
     overflow-y: auto;
   }
-
-  ul {
-    list-style-type: none;
-    margin: 0 20px;
-    display: flex;
-    padding: 0;
-    font-size: $medium-font;
-    justify-content: center;
-    min-height: 40px;
-
-    li {
-      list-style: none;
-      padding: 10px 30px;
-      cursor: pointer;
-
-      &.active {
-        border-bottom: 3px solid $green;
-      }
-
-      &:hover {
-        border-bottom: 3px solid $green;
-      }
-    }
-  }
 }
 
-.section{
-  border-bottom: 1px solid $delimiter;
+.panelTitle {
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--calcite-ui-border-2, rgba(100, 100, 100, 0.75));
+  font-size: var(--calcite-font-size-0, 1.2rem);
+  color: var(--calcite-ui-text-1, rgb(50, 50, 50));
+  text-align: left;
 }
 
 @media (max-width: $max-width) {
   .menuPanel {
-    display: none;
+    display: flex;
     position: absolute;
-    bottom: 0;
-    top: auto;
+    top: 56px;
     width: 100%;
-    height: 200px;
+    height: auto;
+    max-height: calc(100% - 56px);
     .panel {
-      padding: 5px;
-    }
-
-    >h1 {
-      display: none;
-    }
-
-    >ul {
-      display: none;
+      padding: 15px;
     }
   }
 }
