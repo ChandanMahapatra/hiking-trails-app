@@ -76,8 +76,8 @@ export default class SelectionPanel {
   }
 
   displayAppInfo() {
-    this.detailInfograph.textContent =
-      "Select a park and trail to view details and the live elevation profile.";
+    this.detailInfograph.innerHTML =
+      '<p class="detailEmptyState">Select a park and trail to view details and the live elevation profile.</p>';
   }
 
   private isMeaningful(value?: string | number | null): boolean {
@@ -223,7 +223,7 @@ export default class SelectionPanel {
       },
     };
     const statusInfo = status[trail.status] || null;
-    const facts = [
+    const primaryFacts = [
       trail.ascent
         ? `<span class="infograph"><span class="fa fa-line-chart" aria-hidden="true"></span> ${trail.ascent} m</span>`
         : "",
@@ -236,17 +236,32 @@ export default class SelectionPanel {
       trail.status && statusInfo
         ? `<span class="infograph"><span class="${statusInfo.icon}" aria-hidden="true"></span> ${statusInfo.text}</span>`
         : "",
+    ].filter(Boolean);
+
+    const attributeRows = [
       this.isMeaningful(trail.surface)
-        ? `<span class="infograph">Surface: ${trail.surface}</span>`
+        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Surface</span><span class="detailAttributeValue">${trail.surface}</span></div>`
         : "",
       this.isMeaningful(trail.trailUse)
-        ? `<span class="infograph">Use: ${trail.trailUse}</span>`
+        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Use</span><span class="detailAttributeValue">${trail.trailUse}</span></div>`
         : "",
       this.isMeaningful(trail.trailType)
-        ? `<span class="infograph">Type: ${trail.trailType}</span>`
+        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Type</span><span class="detailAttributeValue">${trail.trailType}</span></div>`
+        : "",
+      this.isMeaningful(trail.trailClass)
+        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Class</span><span class="detailAttributeValue">${trail.trailClass}</span></div>`
         : "",
     ].filter(Boolean);
 
-    this.detailInfograph.innerHTML = facts.join("");
+    const sections = [
+      primaryFacts.length
+        ? `<div class="detailFacts detailFacts--primary">${primaryFacts.join("")}</div>`
+        : "",
+      attributeRows.length
+        ? `<div class="detailFacts detailFacts--secondary">${attributeRows.join("")}</div>`
+        : "",
+    ].filter(Boolean);
+
+    this.detailInfograph.innerHTML = sections.join("");
   }
 }

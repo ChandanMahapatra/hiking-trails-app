@@ -30,7 +30,7 @@ import Expand from "@arcgis/core/widgets/Expand";
 import Viewpoint from "@arcgis/core/Viewpoint";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 import config from "../config";
-import { ArcGISView, State } from "../types";
+import { ArcGISView, State, Trail } from "../types";
 import "../../style/scene-panel.scss";
 
 const US_HOME_VIEWPOINT = new Viewpoint({
@@ -108,7 +108,7 @@ export default class SceneElement {
     this.sanitizeSceneViewLabelPlacement();
 
     this.resolveLayers();
-  this.captureLayerDefaults();
+    this.captureLayerDefaults();
     this.state.trailsLayer = this.trailsLayer;
     this.state.parksLayer = this.parksLayer;
     this.view = this.createView(this.state.viewMode);
@@ -374,6 +374,7 @@ export default class SceneElement {
         type: "simple",
         symbol: {
           type: "simple-fill",
+          style: "none",
           color: config.colors.selectedParkFill,
           outline: {
             color: [0, 0, 0, 0],
@@ -395,6 +396,66 @@ export default class SceneElement {
     }
 
     return layer.renderer;
+  }
+
+  private createParkHighlightSymbol(hasTrail: boolean) {
+    return {
+      type: "simple-fill",
+      style: "none",
+      color: config.colors.selectedParkFill,
+      outline: {
+        color: hasTrail
+          ? [77, 161, 255, config.selection.parkOutlineMutedOpacity]
+          : config.colors.selectedParkOutline,
+        width: hasTrail
+          ? config.selection.parkOutlineMutedWidth
+          : config.selection.parkOutlineWidth,
+      },
+    } as any;
+  }
+
+  private getTrailWallHeight(trail: Trail) {
+    if (typeof trail?.ascent === "number" && Number.isFinite(trail.ascent)) {
+      return Math.max(
+        config.selection.trailWallMinHeight,
+        Math.min(
+          config.selection.trailWallMaxHeight,
+          trail.ascent * config.selection.trailWallHeightMultiplier
+        )
+      );
+    }
+
+    return config.selection.trailWallDefaultHeight;
+  }
+
+  private createSelectedTrailSymbol(trail: Trail) {
+    if (this.view?.type === "3d") {
+      return {
+        type: "line-3d",
+        symbolLayers: [
+          {
+            type: "path",
+            profile: "quad",
+            material: {
+              color: config.colors.selectedTrail,
+            },
+            width: config.selection.trailWallWidth,
+            height: this.getTrailWallHeight(trail),
+            anchor: "bottom",
+            cap: "round",
+            join: "round",
+            profileRotation: "heading",
+            castShadows: false,
+          },
+        ],
+      } as any;
+    }
+
+    return {
+      type: "simple-line",
+      color: config.colors.selectedTrail,
+      width: 4,
+    } as any;
   }
 
   private restoreLayerRenderer(layer: FeatureLayer, renderer: __esri.Renderer | null) {
@@ -570,22 +631,10 @@ export default class SceneElement {
     this.clearHighlights();
 
     if (this.state.selectedPark) {
-      const hasTrail = !!this.state.selectedTrail;
-      const parkOutlineColor = hasTrail
-        ? [77, 161, 255, 0.08]
-        : config.colors.selectedParkOutline;
-
       this.highlightLayer.add(
         new Graphic({
           geometry: this.state.selectedPark.geometry,
-          symbol: {
-            type: "simple-fill",
-            color: config.colors.selectedParkFill,
-            outline: {
-              color: parkOutlineColor,
-              width: hasTrail ? 1 : 2,
-            },
-          } as any,
+          symbol: this.createParkHighlightSymbol(!!this.state.selectedTrail),
         })
       );
     }
@@ -594,11 +643,7 @@ export default class SceneElement {
       this.highlightLayer.add(
         new Graphic({
           geometry: this.state.selectedTrail.geometry,
-          symbol: {
-            type: "simple-line",
-            color: config.colors.selectedTrail,
-            width: 4,
-          } as any,
+          symbol: this.createSelectedTrailSymbol(this.state.selectedTrail),
         })
       );
     }

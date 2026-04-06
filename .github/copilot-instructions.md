@@ -61,7 +61,14 @@
 - Selected-only map presentation currently depends on source-layer filtering plus a separate `highlightLayer` in `SceneElement`:
 	- Keep the selected park source renderer visually suppressed so the highlight graphic is the only visible park selection treatment.
 	- Do not regress to opacity-only hiding for selected parks; that allowed polygon fill to leak through at close zoom levels in 3D.
+	- Keep the selected park source symbol as outline-free `style: "none"` so terrain, contours, and basemap detail remain visible inside the selected park.
 	- Reapply selection filters and highlight graphics after 3D/2D view recreation.
+- Selected trail emphasis currently differs by view type:
+	- In `SceneView`, the selected trail uses a volumetric `line-3d` path symbol with a `quad` profile for a wall-like 3D highlight.
+	- In `MapView`, the selected trail falls back to a simple flat line highlight.
+- Trail detail layout currently groups selected-trail information into separate fact and attribute sections:
+	- Keep compact fact badges for values such as ascent, difficulty, duration, and status when available.
+	- Keep stacked attribute rows for values such as surface, use, type, and class below the primary facts.
 - Elevation profile creation currently depends on guarded widget creation in `DetailPanel`:
 	- Build the `ElevationProfile` input from a valid `Graphic`, not from the raw trail model.
 	- Validate that selected trail geometry is a polyline with at least one path and at least two vertices before creating the widget.

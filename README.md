@@ -22,11 +22,15 @@ This app is based on [Esri's hiking-trails-app](https://github.com/Esri/hiking-t
 
 * Park selection rendering now suppresses the selected source polygon symbology and relies on a dedicated highlight graphics layer, so selected parks remain outline-only even when zoomed in.
 
+* In 3D, the selected trail now uses a volumetric wall-like highlight built from a SceneView `line-3d` path symbol, while 2D continues to use the lighter simple-line highlight fallback.
+
 * The elevation profile flow now validates selected trail geometry before widget creation. The selected trail is converted into an ArcGIS `Graphic`, and incomplete or invalid polyline inputs show a concise in-panel fallback instead of failing silently.
 
 * Trail and park initialization now retries briefly while the web map and inferred layers finish loading. The sidebar loader and empty-state messaging stay in sync with that initialization path.
 
 * Active park and trail selections are reapplied after 3D/2D view switches, and the elevation profile is rebuilt against the current view so the panel remains consistent across mode changes.
+
+* The trail detail area below the comboboxes now separates compact fact badges from stacked attribute rows such as surface, use, type, and class to improve readability.
 
 ## Maps and layers used
 
@@ -53,6 +57,8 @@ Because the app intentionally infers layers from the configured web map, you can
 * The app keeps selected-only visibility by filtering the source park and trail layers to the active object IDs while rendering the visible highlight styling from a separate graphics layer.
 
 * Park highlighting is intentionally outline-first. When a trail is also selected, the park outline becomes faint so the trail highlight remains visually dominant.
+
+* In SceneView, the selected trail highlight uses a volumetric `line-3d` path symbol with a quad profile to create a wall-like 3D trail emphasis. In MapView, the selected trail falls back to a simpler flat line highlight.
 
 * Trail detail fallbacks prefer concise values from inferred attributes such as surface, use, type, and seasonal description, while the ArcGIS `ElevationProfile` widget remains the source of elevation information.
 

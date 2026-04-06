@@ -23,10 +23,20 @@ export default {
   scene: {
     webmapItemId: "5a94b21ff6e94d10ae61483c392bbf9b"
   },
+  selection: {
+    parkOutlineWidth: 4,
+    parkOutlineMutedWidth: 2,
+    parkOutlineMutedOpacity: 0.4,
+    trailWallWidth: 5,
+    trailWallDefaultHeight: 24,
+    trailWallMinHeight: 16,
+    trailWallMaxHeight: 48,
+    trailWallHeightMultiplier: 0.08
+  },
   colors: {
     defaultTrail: "#db5353",
     selectedTrail: "#f9a352",
-    selectedParkFill: "rgba(0, 0, 0, 0)",
+    selectedParkFill: [0, 0, 0, 0],
     selectedParkOutline: "#4da1ff"
   }
 };
