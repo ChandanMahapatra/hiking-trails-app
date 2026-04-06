@@ -27,11 +27,14 @@ export default {
     parkOutlineWidth: 4,
     parkOutlineMutedWidth: 2,
     parkOutlineMutedOpacity: 0.4,
-    trailWallWidth: 5,
-    trailWallDefaultHeight: 24,
-    trailWallMinHeight: 16,
-    trailWallMaxHeight: 48,
-    trailWallHeightMultiplier: 0.08
+    trailSourceSelectionOffset3d: 14,
+    trailSourceSelectionWidth3d: 4,
+    trailSourceSelectionWidth2d: 2,
+    trailWallWidth: 3,
+    trailWallDefaultHeight: 10,
+    trailWallMinHeight: 6,
+    trailWallMaxHeight: 18,
+    trailWallHeightMultiplier: 0.025
   },
   colors: {
     defaultTrail: "#db5353",

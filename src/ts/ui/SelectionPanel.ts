@@ -16,7 +16,7 @@
 
 import "../../style/selection-panel.scss";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
-import { EntityId, State } from "../types";
+import { EntityId, State, Trail } from "../types";
 
 export default class SelectionPanel {
   parkSelect: HTMLElement;
@@ -134,12 +134,22 @@ export default class SelectionPanel {
       return;
     }
 
-    const filtered = trails.filter((t) => String(t.parkId) === String(selectedParkId));
+    const filtered = trails
+      .filter((t) => String(t.parkId) === String(selectedParkId))
+      .slice()
+      .sort((a, b) => {
+        const nameCompare = this.getBaseTrailLabel(a).localeCompare(this.getBaseTrailLabel(b));
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+        return this.compareEntityIds(a.objectId ?? a.id, b.objectId ?? b.id);
+      });
+    const optionLabels = this.buildTrailOptionLabels(filtered);
 
     this.removeAllItems(this.trailSelect);
 
     filtered.forEach((trail) => {
-      const trailLabel = String(trail.name || "").trim() || `Trail ${trail.id}`;
+      const trailLabel = optionLabels.get(this.getTrailOptionKey(trail)) || this.getBaseTrailLabel(trail);
       this.trailSelect.appendChild(this.createComboboxItem(trail.id, trailLabel));
     });
 
@@ -195,6 +205,60 @@ export default class SelectionPanel {
     item.label = normalizedLabel;
 
     return item;
+  }
+
+  private getBaseTrailLabel(trail: Trail) {
+    return String(trail.name || "").trim() || `Trail ${trail.id}`;
+  }
+
+  private getTrailOptionKey(trail: Trail) {
+    return String(trail.objectId ?? trail.id);
+  }
+
+  private compareEntityIds(
+    left: EntityId | null | undefined,
+    right: EntityId | null | undefined
+  ) {
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+    const leftIsNumber = Number.isFinite(leftNumber) && String(left).trim() !== "";
+    const rightIsNumber = Number.isFinite(rightNumber) && String(right).trim() !== "";
+
+    if (leftIsNumber && rightIsNumber) {
+      return leftNumber - rightNumber;
+    }
+
+    return String(left ?? "").localeCompare(String(right ?? ""));
+  }
+
+  private buildTrailOptionLabels(trails: Trail[]) {
+    const groupedTrails = new Map<string, Trail[]>();
+    const labels = new Map<string, string>();
+
+    trails.forEach((trail) => {
+      const labelKey = this.getBaseTrailLabel(trail).toLowerCase();
+      const existing = groupedTrails.get(labelKey) || [];
+      existing.push(trail);
+      groupedTrails.set(labelKey, existing);
+    });
+
+    groupedTrails.forEach((group) => {
+      if (group.length === 1) {
+        const trail = group[0];
+        labels.set(this.getTrailOptionKey(trail), this.getBaseTrailLabel(trail));
+        return;
+      }
+
+      const displayBaseLabel = this.getBaseTrailLabel(group[0]);
+      group.forEach((trail, index) => {
+        labels.set(
+          this.getTrailOptionKey(trail),
+          `${displayBaseLabel} (${index + 1} of ${group.length})`
+        );
+      });
+    });
+
+    return labels;
   }
 
   /** Set the `selected` JS property on the matching item; clear all others. */

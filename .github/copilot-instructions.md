@@ -47,6 +47,9 @@
 	- Trail option labels must never be blank:
 		- Trim candidate trail names from inferred fields.
 		- If blank/whitespace, fall back to a non-empty label (for example `Trail <id>`).
+	- Do not deduplicate trail records in state solely because names repeat.
+		- Duplicate trail names in the combobox may reflect valid source-layer segments or records.
+		- When duplicate names exist within the selected park, keep one option per record and disambiguate only the displayed label with a deterministic suffix such as `(1 of N)`.
 	- Preserve reactive sync between state and combobox selection (selected IDs ↔ selected items).
 		- Trail detail text must not render literal `null`/`Unknown` placeholders; prefer concise fallbacks and keep the ElevationProfile visible when geometry is available.
 
@@ -56,6 +59,11 @@
 - Layer inference and blank-label fallback must remain resilient because layer fields vary across web maps.
 - The current NPS boundary layer exposes `UNIT_TYPE`; when available, use it to keep the park list scoped to National Parks only.
 - Selection state must stay string-safe, synchronize between comboboxes and map clicks, and preserve context across 3D/2D switches.
+- Repeated trail names are currently treated as source-data truth, not as UI duplication.
+	- The combobox rebuilds from scratch on park changes.
+	- Duplicate display names should be clarified in the UI, not removed from state.
+- Selected-park source trails must remain visible in both 2D and 3D.
+	- In SceneView, the source trails layer now needs temporary elevation handling during active selection so filtered trails remain visible above terrain.
 
 ## Current implementation context
 - Selected-only map presentation currently depends on source-layer filtering plus a separate `highlightLayer` in `SceneElement`:
@@ -64,6 +72,11 @@
 	- Keep the selected park source symbol as outline-free `style: "none"` so terrain, contours, and basemap detail remain visible inside the selected park.
 	- When a park is selected, temporarily suppress overlapping polygon layers from the WebMap and restore their original visibility or definition state when selection is cleared.
 	- Reapply selection filters and highlight graphics after 3D/2D view recreation.
+	- Reapply selection zoom after 3D/2D view recreation so the active park or trail context is preserved visually, not just in state.
+- Selected-park source-trail presentation now has a view-specific requirement:
+	- When a park or trail is actively selected, force the inferred trails layer visible instead of restoring an originally hidden WebMap visibility state.
+	- In `SceneView`, temporarily set the source trails layer elevation to `relative-to-ground` with a small offset so park-selected trail lines stay visible above terrain.
+	- Restore the original trails-layer elevation info when selection clears or when the active view is 2D.
 - Selected trail emphasis currently differs by view type:
 	- In `SceneView`, the selected trail uses a volumetric `line-3d` path symbol with a `quad` profile for a wall-like 3D highlight.
 	- In `MapView`, the selected trail falls back to a simple flat line highlight.

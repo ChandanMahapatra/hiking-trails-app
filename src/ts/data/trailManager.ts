@@ -282,7 +282,7 @@ async function queryAllFeatures(layer, options) {
   }
 }
 
-function getTrailParkField(layer, parkLayer) {
+export function getTrailParkField(layer, parkLayer) {
   const fieldNames = layer.fields.map((field) => field.name);
   const parkObjectIdField = String(parkLayer?.objectIdField || "").toLowerCase();
   const parkDisplayField = String(parkLayer?.displayField || "").toLowerCase();

@@ -16,6 +16,7 @@
 
 import WebMap from "@arcgis/core/WebMap";
 import Graphic from "@arcgis/core/Graphic";
+import Polyline from "@arcgis/core/geometry/Polyline";
 import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
 import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
 import MapView from "@arcgis/core/views/MapView";
@@ -30,7 +31,7 @@ import Expand from "@arcgis/core/widgets/Expand";
 import Viewpoint from "@arcgis/core/Viewpoint";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 import config from "../config";
-import { inferLayersFromMap } from "../data/trailManager";
+import { getTrailParkField, inferLayersFromMap } from "../data/trailManager";
 import { ArcGISView, State, Trail } from "../types";
 import "../../style/scene-panel.scss";
 
@@ -50,10 +51,12 @@ export default class SceneElement {
   map: WebMap;
   trailsLayer: FeatureLayer | null;
   parksLayer: FeatureLayer | null;
+  parkTrailHighlightLayer: GraphicsLayer;
   highlightLayer: GraphicsLayer;
   ready: Promise<void>;
   private isSwitchingView: boolean;
   private originalTrailsRenderer: __esri.Renderer | null;
+  private originalTrailsElevationInfo: __esri.ElevationInfo | null;
   private originalParksRenderer: __esri.Renderer | null;
   private otherPolygonLayers: FeatureLayer[];
   private originalDefinitionExpressions: Map<FeatureLayer, string | null>;
@@ -63,6 +66,7 @@ export default class SceneElement {
     this.state = state;
     this.isSwitchingView = false;
     this.originalTrailsRenderer = null;
+    this.originalTrailsElevationInfo = null;
     this.originalParksRenderer = null;
     this.otherPolygonLayers = [];
     this.originalDefinitionExpressions = new Map();
@@ -72,11 +76,15 @@ export default class SceneElement {
         id: config.scene.webmapItemId,
       },
     });
+    this.parkTrailHighlightLayer = new GraphicsLayer({
+      title: "Selected park trails",
+      listMode: "hide",
+    });
     this.highlightLayer = new GraphicsLayer({
       title: "Selection highlight",
       listMode: "hide",
     });
-    this.map.add(this.highlightLayer);
+    this.map.addMany([this.parkTrailHighlightLayer, this.highlightLayer]);
 
     this.ready = this.init();
 
@@ -194,6 +202,7 @@ export default class SceneElement {
       await this.view.when();
       this.applySelectionFilters();
       this.renderHighlights();
+      this.zoomToSelection();
     } finally {
       this.isSwitchingView = false;
     }
@@ -297,6 +306,10 @@ export default class SceneElement {
       this.originalTrailsRenderer = this.trailsLayer.renderer.clone();
     }
 
+    this.originalTrailsElevationInfo = this.cloneElevationInfo(
+      this.trailsLayer?.elevationInfo
+    );
+
     if (this.parksLayer?.renderer) {
       this.originalParksRenderer = this.parksLayer.renderer.clone();
     }
@@ -314,6 +327,7 @@ export default class SceneElement {
   }
 
   private clearHighlights() {
+    this.parkTrailHighlightLayer.removeAll();
     this.highlightLayer.removeAll();
   }
 
@@ -348,16 +362,25 @@ export default class SceneElement {
   }
 
   private createParkHighlightSymbol(hasTrail: boolean) {
+    const mutedOutlineWidth = Math.max(
+      config.selection.parkOutlineMutedWidth,
+      config.selection.parkOutlineWidth - 1
+    );
+    const mutedOutlineOpacity = Math.max(
+      config.selection.parkOutlineMutedOpacity,
+      0.75
+    );
+
     return {
       type: "simple-fill",
       style: "none",
       color: config.colors.selectedParkFill,
       outline: {
         color: hasTrail
-          ? [77, 161, 255, config.selection.parkOutlineMutedOpacity]
+          ? [77, 161, 255, mutedOutlineOpacity]
           : config.colors.selectedParkOutline,
         width: hasTrail
-          ? config.selection.parkOutlineMutedWidth
+          ? mutedOutlineWidth
           : config.selection.parkOutlineWidth,
       },
     } as any;
@@ -407,11 +430,115 @@ export default class SceneElement {
     } as any;
   }
 
+  private createSelectedParkTrailSymbol() {
+    return {
+      type: "simple-line",
+      color: config.colors.defaultTrail,
+      width:
+        this.view?.type === "3d"
+          ? config.selection.trailSourceSelectionWidth3d
+          : config.selection.trailSourceSelectionWidth2d,
+      cap: "round",
+      join: "round",
+    } as any;
+  }
+
+  private createSelectedParkTrailsRenderer() {
+    return {
+      type: "simple",
+      symbol: this.createSelectedParkTrailSymbol(),
+    } as any;
+  }
+
+  private createRenderSafeTrailGeometry(trail: Trail | null | undefined) {
+    const sourceGeometry = trail?.geometry;
+    const paths = sourceGeometry?.paths || [];
+    const safePaths = paths
+      .map((path) => {
+        return path
+          .map((vertex) => {
+            if (!Array.isArray(vertex) || vertex.length < 2) {
+              return null;
+            }
+
+            const x = Number(vertex[0]);
+            const y = Number(vertex[1]);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+              return null;
+            }
+
+            return [x, y];
+          })
+          .filter(Boolean);
+      })
+      .filter((path) => path.length >= 2);
+
+    if (!safePaths.length) {
+      return null;
+    }
+
+    return new Polyline({
+      paths: safePaths as number[][][],
+      spatialReference: sourceGeometry.spatialReference,
+      hasZ: false,
+    });
+  }
+
+  private getSelectedParkTrails() {
+    if (!this.state.selectedPark) {
+      return [];
+    }
+
+    return (this.state.trails || []).filter((trail) => {
+      return String(trail.parkId) === String(this.state.selectedPark.id);
+    });
+  }
+
+  private syncParkTrailHighlightElevation() {
+    if (!this.parkTrailHighlightLayer) {
+      return;
+    }
+
+    this.parkTrailHighlightLayer.elevationInfo =
+      this.view?.type === "3d"
+        ? ({
+            mode: "relative-to-ground",
+            offset: config.selection.trailSourceSelectionOffset3d,
+          } as any)
+        : (null as any);
+  }
+
+  private getCombinedExtent(geometries: __esri.Polyline[]) {
+    const firstExtent = geometries[0]?.extent?.clone();
+    if (!firstExtent) {
+      return null;
+    }
+
+    return geometries.slice(1).reduce((combinedExtent, geometry) => {
+      const nextExtent = geometry?.extent;
+      if (!nextExtent) {
+        return combinedExtent;
+      }
+
+      return combinedExtent.union(nextExtent) as __esri.Extent;
+    }, firstExtent as __esri.Extent);
+  }
+
   private restoreLayerRenderer(layer: FeatureLayer, renderer: __esri.Renderer | null) {
     if (renderer) {
       const nextRenderer = (renderer as any)?.clone ? (renderer as any).clone() : renderer;
       layer.renderer = nextRenderer as any;
     }
+  }
+
+  private cloneElevationInfo(elevationInfo: __esri.ElevationInfo | null | undefined) {
+    if (!elevationInfo) {
+      return null;
+    }
+
+    return (elevationInfo as any)?.clone
+      ? (elevationInfo as any).clone()
+      : { ...(elevationInfo as any) };
   }
 
   private restoreLayerExpression(layer: FeatureLayer) {
@@ -420,6 +547,16 @@ export default class SceneElement {
 
   private restoreLayerVisibility(layer: FeatureLayer) {
     layer.visible = this.originalVisibility.get(layer) ?? true;
+  }
+
+  private restoreTrailsLayerElevationInfo() {
+    if (!this.trailsLayer) {
+      return;
+    }
+
+    this.trailsLayer.elevationInfo = this.cloneElevationInfo(
+      this.originalTrailsElevationInfo
+    ) as any;
   }
 
   private buildObjectIdExpression(layer: FeatureLayer, objectId: any) {
@@ -431,10 +568,72 @@ export default class SceneElement {
     return `${layer.objectIdField} = '${escaped}'`;
   }
 
+  private buildSqlValue(value: any) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue) && String(value).trim() !== "") {
+      return String(numericValue);
+    }
+
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  private buildFieldValueExpression(fieldName: string, values: any[]) {
+    const uniqueValues = Array.from(
+      new Set(
+        values.filter((value) => {
+          return value !== null && value !== undefined && String(value).trim() !== "";
+        })
+      )
+    );
+
+    if (!uniqueValues.length) {
+      return null;
+    }
+
+    if (uniqueValues.length === 1) {
+      return `${fieldName} = ${this.buildSqlValue(uniqueValues[0])}`;
+    }
+
+    return `${fieldName} IN (${uniqueValues.map((value) => this.buildSqlValue(value)).join(", ")})`;
+  }
+
+  private buildObjectIdSetExpression(layer: FeatureLayer, objectIds: any[]) {
+    return this.buildFieldValueExpression(layer.objectIdField, objectIds);
+  }
+
+  private getSelectedParkTrailExpression() {
+    if (!this.trailsLayer || !this.parksLayer || !this.state.selectedPark) {
+      return null;
+    }
+
+    const parkField = getTrailParkField(this.trailsLayer, this.parksLayer);
+    if (parkField) {
+      return this.buildFieldValueExpression(parkField, [this.state.selectedPark.id]);
+    }
+
+    const trailObjectIds = (this.state.trails || [])
+      .filter((trail) => {
+        return String(trail.parkId) === String(this.state.selectedPark.id);
+      })
+      .map((trail) => trail.objectId);
+
+    return this.buildObjectIdSetExpression(this.trailsLayer, trailObjectIds);
+  }
+
+  private getSelectedParkTrailGeometries() {
+    return this.getSelectedParkTrails()
+      .map((trail) => this.createRenderSafeTrailGeometry(trail))
+      .filter(Boolean) as __esri.Polyline[];
+  }
+
   private applySelectionFilters() {
     const hasSelectedPark =
       this.state.selectedPark?.objectId !== null &&
       this.state.selectedPark?.objectId !== undefined;
+    const hasSelectedTrail =
+      this.state.selectedTrail?.objectId !== null &&
+      this.state.selectedTrail?.objectId !== undefined;
+    const hasActiveSelection = hasSelectedPark || hasSelectedTrail;
 
     if (this.parksLayer) {
       if (hasSelectedPark) {
@@ -464,19 +663,39 @@ export default class SceneElement {
     });
 
     if (this.trailsLayer) {
-      if (this.state.selectedTrail?.objectId !== null && this.state.selectedTrail?.objectId !== undefined) {
+      if (hasSelectedTrail) {
         this.trailsLayer.definitionExpression = this.buildObjectIdExpression(
           this.trailsLayer,
           this.state.selectedTrail.objectId
         );
-        this.trailsLayer.renderer = this.createTransparentSelectionRenderer(this.trailsLayer);
+        this.restoreLayerRenderer(this.trailsLayer, this.originalTrailsRenderer);
+      } else if (hasSelectedPark) {
+        this.trailsLayer.definitionExpression =
+          this.getSelectedParkTrailExpression() || "1=0";
+        this.trailsLayer.renderer = this.createSelectedParkTrailsRenderer();
       } else {
         this.restoreLayerExpression(this.trailsLayer);
         this.restoreLayerRenderer(this.trailsLayer, this.originalTrailsRenderer);
       }
 
-      this.restoreLayerVisibility(this.trailsLayer);
-      this.trailsLayer.opacity = 1;
+      if (hasActiveSelection && this.view?.type === "3d") {
+        this.trailsLayer.elevationInfo = {
+          mode: "relative-to-ground",
+          offset: config.selection.trailSourceSelectionOffset3d,
+        } as any;
+      } else {
+        this.restoreTrailsLayerElevationInfo();
+      }
+
+      if (hasActiveSelection) {
+        this.trailsLayer.visible = true;
+      } else {
+        this.restoreLayerVisibility(this.trailsLayer);
+      }
+      this.trailsLayer.opacity =
+        hasSelectedPark && !hasSelectedTrail && this.view?.type === "3d"
+          ? 0.35
+          : 1;
     }
   }
 
@@ -603,6 +822,7 @@ export default class SceneElement {
 
   private renderHighlights() {
     this.clearHighlights();
+    this.syncParkTrailHighlightElevation();
 
     if (this.state.selectedPark) {
       this.highlightLayer.add(
@@ -613,10 +833,34 @@ export default class SceneElement {
       );
     }
 
+    if (this.state.selectedPark && !this.state.selectedTrail) {
+      const parkTrailGraphics = this.getSelectedParkTrails()
+        .map((trail) => {
+          const geometry = this.createRenderSafeTrailGeometry(trail);
+          if (!geometry) {
+            return null;
+          }
+
+          return new Graphic({
+            geometry,
+            symbol: this.createSelectedParkTrailSymbol(),
+          });
+        })
+        .filter(Boolean) as Graphic[];
+
+      if (parkTrailGraphics.length) {
+        this.parkTrailHighlightLayer.addMany(parkTrailGraphics);
+      }
+    }
+
     if (this.state.selectedTrail) {
+      const trailGeometry =
+        this.createRenderSafeTrailGeometry(this.state.selectedTrail) ||
+        this.state.selectedTrail.geometry;
+
       this.highlightLayer.add(
         new Graphic({
-          geometry: this.state.selectedTrail.geometry,
+          geometry: trailGeometry,
           symbol: this.createSelectedTrailSymbol(this.state.selectedTrail),
         })
       );
@@ -629,9 +873,13 @@ export default class SceneElement {
     }
 
     if (this.state.selectedTrail?.geometry) {
+      const trailGeometry =
+        this.createRenderSafeTrailGeometry(this.state.selectedTrail) ||
+        this.state.selectedTrail.geometry;
+
       this.view.goTo(
         {
-          target: this.state.selectedTrail.geometry,
+          target: trailGeometry,
           tilt: this.view.type === "3d" ? 60 : undefined,
         },
         { speedFactor: 0.5 }
@@ -640,9 +888,37 @@ export default class SceneElement {
     }
 
     if (this.state.selectedPark?.geometry) {
+      const selectedParkTrailGeometries = this.getSelectedParkTrailGeometries();
+
+      if (this.view.type === "3d" && selectedParkTrailGeometries.length > 0) {
+        const selectedParkTrailExtent = this.getCombinedExtent(selectedParkTrailGeometries);
+
+        if (selectedParkTrailExtent?.center) {
+          const maxDimension = Math.max(
+            selectedParkTrailExtent.width || 0,
+            selectedParkTrailExtent.height || 0
+          );
+          const scale = Math.max(90000, Math.min(maxDimension * 6, 700000));
+
+          this.view.goTo(
+            {
+              target: selectedParkTrailExtent.center,
+              scale,
+              tilt: 55,
+            },
+            { speedFactor: 0.7 }
+          );
+          return;
+        }
+      }
+
       this.view.goTo(
         {
-          target: this.state.selectedPark.geometry,
+          target:
+            selectedParkTrailGeometries.length > 0
+              ? selectedParkTrailGeometries
+              : this.state.selectedPark.geometry,
+          tilt: this.view.type === "3d" ? 55 : undefined,
         },
         { speedFactor: 0.7 }
       );
