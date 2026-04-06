@@ -9,6 +9,7 @@ export type Device = "mobilePortrait" | "desktop";
 export type ViewMode = "3d" | "2d";
 export type ArcGISView = SceneView | MapView;
 export type EntityId = string | number;
+export type DistanceUnit = "mi" | "km";
 
 export interface State extends Accessor {
   displayLoading: boolean;
@@ -39,6 +40,8 @@ export interface Trail {
   walktime?: number;
   status?: string;
   ascent?: number;
+  length?: number;
+  lengthUnit?: DistanceUnit | null;
   description?: string;
   surface?: string;
   trailType?: string;

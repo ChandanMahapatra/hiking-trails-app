@@ -30,6 +30,7 @@ import Expand from "@arcgis/core/widgets/Expand";
 import Viewpoint from "@arcgis/core/Viewpoint";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 import config from "../config";
+import { inferLayersFromMap } from "../data/trailManager";
 import { ArcGISView, State, Trail } from "../types";
 import "../../style/scene-panel.scss";
 
@@ -54,12 +55,18 @@ export default class SceneElement {
   private isSwitchingView: boolean;
   private originalTrailsRenderer: __esri.Renderer | null;
   private originalParksRenderer: __esri.Renderer | null;
+  private otherPolygonLayers: FeatureLayer[];
+  private originalDefinitionExpressions: Map<FeatureLayer, string | null>;
+  private originalVisibility: Map<FeatureLayer, boolean>;
 
   constructor(state: State) {
     this.state = state;
     this.isSwitchingView = false;
     this.originalTrailsRenderer = null;
     this.originalParksRenderer = null;
+    this.otherPolygonLayers = [];
+    this.originalDefinitionExpressions = new Map();
+    this.originalVisibility = new Map();
     this.map = new WebMap({
       portalItem: {
         id: config.scene.webmapItemId,
@@ -277,81 +284,12 @@ export default class SceneElement {
   }
 
   private resolveLayers() {
-    const featureLayers = this.map.allLayers
-      .filter((layer) => layer.type === "feature")
-      .toArray() as FeatureLayer[];
-
-    const scoreLayer = (
-      layer: FeatureLayer,
-      geometryType: "polyline" | "polygon",
-      titlePattern: RegExp,
-      fieldPattern: RegExp
-    ) => {
-      if (layer.geometryType !== geometryType) {
-        return -1;
-      }
-      let score = 0;
-      const title = (layer.title || "").toLowerCase();
-      const url = (layer.url || "").toLowerCase();
-      const displayField = (layer.displayField || "").toLowerCase();
-      const fieldNames = (layer.fields || []).map((field) => {
-        return String(field.name || "").toLowerCase();
-      });
-
-      if (titlePattern.test(title)) {
-        score += 8;
-      }
-      if (titlePattern.test(url)) {
-        score += 4;
-      }
-      if (fieldPattern.test(displayField)) {
-        score += 2;
-      }
-
-      const matchingFields = fieldNames.filter((name) => fieldPattern.test(name));
-      score += Math.min(matchingFields.length, 4);
-
-      // Boost layers carrying unit_code / unit_type for reliable joins.
-      if (geometryType === "polygon") {
-        if (fieldNames.some((n) => n === "unit_code")) score += 3;
-        if (fieldNames.some((n) => n === "unit_type")) score += 2;
-      }
-      if (geometryType === "polyline") {
-        if (fieldNames.some((n) => n === "unitcode")) score += 3;
-      }
-
-      return score;
-    };
-
-    const selectBestLayer = (
-      geometryType: "polyline" | "polygon",
-      titlePattern: RegExp,
-      fieldPattern: RegExp
-    ) => {
-      const candidates = featureLayers
-        .map((layer) => ({
-          layer,
-          score: scoreLayer(layer, geometryType, titlePattern, fieldPattern),
-        }))
-        .filter((candidate) => candidate.score >= 0)
-        .sort((a, b) => b.score - a.score);
-
-      return candidates[0]?.layer || null;
-    };
-
-    this.trailsLayer =
-      selectBestLayer(
-        "polyline",
-        /trail|route|hike/i,
-        /trail|route|hike|path|name|id/
-      ) || featureLayers.find((layer) => layer.geometryType === "polyline") || null;
-
-    this.parksLayer =
-      selectBestLayer(
-        "polygon",
-        /park|boundary|reserve|national/i,
-        /park|boundary|reserve|unit|name|id/
-      ) || featureLayers.find((layer) => layer.geometryType === "polygon") || null;
+    const inferredLayers = inferLayersFromMap(this.map);
+    this.trailsLayer = inferredLayers.trailsLayer;
+    this.parksLayer = inferredLayers.parksLayer;
+    this.otherPolygonLayers = (inferredLayers.polygonLayers || []).filter((layer) => {
+      return layer !== this.parksLayer;
+    }) as FeatureLayer[];
   }
 
   private captureLayerDefaults() {
@@ -362,6 +300,17 @@ export default class SceneElement {
     if (this.parksLayer?.renderer) {
       this.originalParksRenderer = this.parksLayer.renderer.clone();
     }
+
+    [this.trailsLayer, this.parksLayer, ...this.otherPolygonLayers]
+      .filter(Boolean)
+      .forEach((layer) => {
+        if (!this.originalDefinitionExpressions.has(layer)) {
+          this.originalDefinitionExpressions.set(layer, layer.definitionExpression || null);
+        }
+        if (!this.originalVisibility.has(layer)) {
+          this.originalVisibility.set(layer, layer.visible);
+        }
+      });
   }
 
   private clearHighlights() {
@@ -465,6 +414,14 @@ export default class SceneElement {
     }
   }
 
+  private restoreLayerExpression(layer: FeatureLayer) {
+    layer.definitionExpression = this.originalDefinitionExpressions.get(layer) ?? null;
+  }
+
+  private restoreLayerVisibility(layer: FeatureLayer) {
+    layer.visible = this.originalVisibility.get(layer) ?? true;
+  }
+
   private buildObjectIdExpression(layer: FeatureLayer, objectId: any) {
     const numericObjectId = Number(objectId);
     if (Number.isFinite(numericObjectId)) {
@@ -475,20 +432,36 @@ export default class SceneElement {
   }
 
   private applySelectionFilters() {
+    const hasSelectedPark =
+      this.state.selectedPark?.objectId !== null &&
+      this.state.selectedPark?.objectId !== undefined;
+
     if (this.parksLayer) {
-      if (this.state.selectedPark?.objectId !== null && this.state.selectedPark?.objectId !== undefined) {
+      if (hasSelectedPark) {
         this.parksLayer.definitionExpression = this.buildObjectIdExpression(
           this.parksLayer,
           this.state.selectedPark.objectId
         );
         this.parksLayer.renderer = this.createTransparentSelectionRenderer(this.parksLayer);
       } else {
-        this.parksLayer.definitionExpression = "1=1";
+        this.restoreLayerExpression(this.parksLayer);
         this.restoreLayerRenderer(this.parksLayer, this.originalParksRenderer);
       }
 
+      this.restoreLayerVisibility(this.parksLayer);
       this.parksLayer.opacity = 1;
     }
+
+    this.otherPolygonLayers.forEach((layer) => {
+      if (hasSelectedPark) {
+        layer.visible = false;
+      } else {
+        this.restoreLayerExpression(layer);
+        this.restoreLayerVisibility(layer);
+      }
+
+      layer.opacity = 1;
+    });
 
     if (this.trailsLayer) {
       if (this.state.selectedTrail?.objectId !== null && this.state.selectedTrail?.objectId !== undefined) {
@@ -498,10 +471,11 @@ export default class SceneElement {
         );
         this.trailsLayer.renderer = this.createTransparentSelectionRenderer(this.trailsLayer);
       } else {
-        this.trailsLayer.definitionExpression = "1=1";
+        this.restoreLayerExpression(this.trailsLayer);
         this.restoreLayerRenderer(this.trailsLayer, this.originalTrailsRenderer);
       }
 
+      this.restoreLayerVisibility(this.trailsLayer);
       this.trailsLayer.opacity = 1;
     }
   }

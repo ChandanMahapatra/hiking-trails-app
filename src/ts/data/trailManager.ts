@@ -17,67 +17,90 @@
 import Trail from "./Trail";
 import * as geometryEngineAsync from "@arcgis/core/geometry/geometryEngineAsync";
 
-function inferLayersFromMap(view) {
-  const allLayers = view?.map?.allLayers;
+type DistanceUnit = "mi" | "km";
+
+type InferredLayers = {
+  trailsLayer: any;
+  parksLayer: any;
+  polygonLayers: any[];
+};
+
+function getFeatureLayers(source) {
+  const allLayers = source?.allLayers || source?.map?.allLayers;
   if (!allLayers) {
-    return { trailsLayer: null, parksLayer: null };
+    return [];
   }
 
-  const featureLayers = allLayers
+  return allLayers
     .filter((layer) => layer.type === "feature")
     .toArray();
+}
 
-  const scoreLayer = (layer, geometryType, titlePattern, fieldPattern) => {
-    if (layer.geometryType !== geometryType) {
-      return -1;
-    }
+function scoreLayer(layer, geometryType, titlePattern, fieldPattern) {
+  if (layer.geometryType !== geometryType) {
+    return -1;
+  }
 
-    let score = 0;
-    const title = String(layer.title || "").toLowerCase();
-    const url = String(layer.url || "").toLowerCase();
-    const displayField = String(layer.displayField || "").toLowerCase();
-    const fieldNames = (layer.fields || []).map((field) => {
-      return String(field.name || "").toLowerCase();
-    });
+  let score = 0;
+  const title = String(layer.title || "").toLowerCase();
+  const url = String(layer.url || "").toLowerCase();
+  const displayField = String(layer.displayField || "").toLowerCase();
+  const fieldNames = (layer.fields || []).map((field) => {
+    return String(field.name || "").toLowerCase();
+  });
 
-    if (titlePattern.test(title)) {
-      score += 8;
-    }
-    if (titlePattern.test(url)) {
-      score += 4;
-    }
-    if (fieldPattern.test(displayField)) {
-      score += 2;
-    }
-    score += Math.min(fieldNames.filter((name) => fieldPattern.test(name)).length, 4);
+  if (titlePattern.test(title)) {
+    score += 8;
+  }
+  if (titlePattern.test(url)) {
+    score += 4;
+  }
+  if (fieldPattern.test(displayField)) {
+    score += 2;
+  }
+  score += Math.min(fieldNames.filter((name) => fieldPattern.test(name)).length, 4);
 
-    // Boost layers that carry the unit_code / unit_type fields needed for
-    // reliable park–trail association and National-Park filtering.
-    if (geometryType === "polygon") {
-      if (fieldNames.some((n) => n === "unit_code")) score += 3;
-      if (fieldNames.some((n) => n === "unit_type")) score += 2;
-    }
-    if (geometryType === "polyline") {
-      if (fieldNames.some((n) => n === "unitcode")) score += 3;
-    }
+  if (geometryType === "polygon") {
+    const hasUnitCode = fieldNames.some((name) => name === "unit_code");
+    const hasUnitType = fieldNames.some((name) => name === "unit_type");
+    const isAdministrativeBoundary = /administrative boundaries|nps boundary|boundary/.test(title);
+    const isBroadLandsLayer = /federal lands|park service lands|public lands/.test(title);
 
-    return score;
-  };
+    if (hasUnitCode) score += 8;
+    if (hasUnitType) score += 6;
+    if (isAdministrativeBoundary) score += 6;
+    if (!hasUnitCode) score -= 4;
+    if (isBroadLandsLayer && !hasUnitCode) score -= 6;
+  }
 
-  const selectBestLayer = (geometryType, titlePattern, fieldPattern) => {
-    const candidates = featureLayers
-      .map((layer) => ({
-        layer,
-        score: scoreLayer(layer, geometryType, titlePattern, fieldPattern),
-      }))
-      .filter((candidate) => candidate.score >= 0)
-      .sort((a, b) => b.score - a.score);
+  if (geometryType === "polyline") {
+    if (fieldNames.some((name) => name === "unitcode")) score += 6;
+  }
 
-    return candidates[0]?.layer || null;
-  };
+  return score;
+}
+
+function selectBestLayer(featureLayers, geometryType, titlePattern, fieldPattern) {
+  const candidates = featureLayers
+    .map((layer) => ({
+      layer,
+      score: scoreLayer(layer, geometryType, titlePattern, fieldPattern),
+    }))
+    .filter((candidate) => candidate.score >= 0)
+    .sort((a, b) => b.score - a.score);
+
+  return candidates[0]?.layer || null;
+}
+
+export function inferLayersFromMap(source): InferredLayers {
+  const featureLayers = getFeatureLayers(source);
+  if (!featureLayers.length) {
+    return { trailsLayer: null, parksLayer: null, polygonLayers: [] };
+  }
 
   const trailsLayer =
     selectBestLayer(
+      featureLayers,
       "polyline",
       /trail|route|hike/i,
       /trail|route|hike|path|name|id/
@@ -85,12 +108,17 @@ function inferLayersFromMap(view) {
 
   const parksLayer =
     selectBestLayer(
+      featureLayers,
       "polygon",
-      /park|boundary|reserve|national/i,
+      /administrative boundaries|boundary|park|reserve|national/i,
       /park|boundary|reserve|unit|name|id/
     ) || featureLayers.find((layer) => layer.geometryType === "polygon") || null;
 
-  return { trailsLayer, parksLayer };
+  return {
+    trailsLayer,
+    parksLayer,
+    polygonLayers: featureLayers.filter((layer) => layer.geometryType === "polygon"),
+  };
 }
 
 function getFieldNameByPriority(fieldNames: string[], priorities: string[]) {
@@ -110,6 +138,23 @@ function toNumber(value: any): number | null {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function inferLengthUnit(fieldName: string | null): DistanceUnit | null {
+  if (!fieldName) {
+    return null;
+  }
+
+  const normalized = fieldName.toLowerCase();
+  if (/trlmiles|miles|mile|(^|_)mi($|_)|\bmi\b/.test(normalized)) {
+    return "mi";
+  }
+
+  if (/kilometers|kilometres|(^|_)km($|_)|\bkms?\b/.test(normalized)) {
+    return "km";
+  }
+
+  return null;
 }
 
 function toEntityId(value: any): string | number | null {
@@ -292,6 +337,16 @@ function inferTrailAttributes(layer, parkLayer, attributes) {
   const walktimeField = getFieldNameByPriority(fieldNames, ["walktime", "time", "duration"]);
   const statusField = getFieldNameByPriority(fieldNames, ["trlstatus", "status", "access", "open"]);
   const ascentField = getFieldNameByPriority(fieldNames, ["ascent", "gain", "elevation"]);
+  const lengthField = getFieldNameByPriority(fieldNames, [
+    "trlmiles",
+    "miles",
+    "mile",
+    "kilometers",
+    "kilometres",
+    "km",
+    "distance",
+    "length",
+  ]);
   const descriptionField = getFieldNameByPriority(fieldNames, ["description", "desc", "info"]);
   const surfaceField = getFieldNameByPriority(fieldNames, ["trlsurface", "surface"]);
   const trailTypeField = getFieldNameByPriority(fieldNames, ["trltype", "type"]);
@@ -321,6 +376,8 @@ function inferTrailAttributes(layer, parkLayer, attributes) {
     walktime: toNumber(walktimeField ? attributes[walktimeField] : null),
     status: statusField ? attributes[statusField] : null,
     ascent: toNumber(ascentField ? attributes[ascentField] : null),
+    length: toNumber(lengthField ? attributes[lengthField] : null),
+    lengthUnit: inferLengthUnit(lengthField),
     description: descriptionField ? attributes[descriptionField] : null,
     surface: surfaceField ? attributes[surfaceField] : null,
     trailType: trailTypeField ? attributes[trailTypeField] : null,

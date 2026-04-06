@@ -32,6 +32,10 @@ This app is based on [Esri's hiking-trails-app](https://github.com/Esri/hiking-t
 
 * The trail detail area below the comboboxes now separates compact fact badges from stacked attribute rows such as surface, use, type, and class to improve readability.
 
+* Active park selection now suppresses overlapping polygon layers from the source WebMap so the selected park interior stays clear in 3D while the blue outline remains the only visible park treatment.
+
+* Trail fact badges now prefer richer trip stats, including source length fields when available and a selected-trail geodetic distance fallback when they are not.
+
 ## Maps and layers used
 
 The default map configuration in [src/ts/config.ts](./src/ts/config.ts) points to ArcGIS WebMap item `5a94b21ff6e94d10ae61483c392bbf9b`.
@@ -56,11 +60,13 @@ Because the app intentionally infers layers from the configured web map, you can
 
 * The app keeps selected-only visibility by filtering the source park and trail layers to the active object IDs while rendering the visible highlight styling from a separate graphics layer.
 
+* Park suppression now restores original layer visibility and definition expressions when selection is cleared, while temporarily hiding other polygon layers that would otherwise overlap the selected park.
+
 * Park highlighting is intentionally outline-first. When a trail is also selected, the park outline becomes faint so the trail highlight remains visually dominant.
 
 * In SceneView, the selected trail highlight uses a volumetric `line-3d` path symbol with a quad profile to create a wall-like 3D trail emphasis. In MapView, the selected trail falls back to a simpler flat line highlight.
 
-* Trail detail fallbacks prefer concise values from inferred attributes such as surface, use, type, and seasonal description, while the ArcGIS `ElevationProfile` widget remains the source of elevation information.
+* Trail detail fallbacks prefer concise values from inferred attributes such as surface, use, type, and seasonal description, while the ArcGIS `ElevationProfile` widget remains the source of elevation information. When trail-length fields are missing or ambiguous, the selected trail can fall back to a geodetic distance measurement for the fact badges.
 
 * Layer inference is biased toward the current NPS boundary layer because it exposes `UNIT_CODE` and `UNIT_TYPE`, which are needed for National Park filtering and park-to-trail association.
 

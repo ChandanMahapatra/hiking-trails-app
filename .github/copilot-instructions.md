@@ -62,13 +62,15 @@
 	- Keep the selected park source renderer visually suppressed so the highlight graphic is the only visible park selection treatment.
 	- Do not regress to opacity-only hiding for selected parks; that allowed polygon fill to leak through at close zoom levels in 3D.
 	- Keep the selected park source symbol as outline-free `style: "none"` so terrain, contours, and basemap detail remain visible inside the selected park.
+	- When a park is selected, temporarily suppress overlapping polygon layers from the WebMap and restore their original visibility or definition state when selection is cleared.
 	- Reapply selection filters and highlight graphics after 3D/2D view recreation.
 - Selected trail emphasis currently differs by view type:
 	- In `SceneView`, the selected trail uses a volumetric `line-3d` path symbol with a `quad` profile for a wall-like 3D highlight.
 	- In `MapView`, the selected trail falls back to a simple flat line highlight.
 - Trail detail layout currently groups selected-trail information into separate fact and attribute sections:
-	- Keep compact fact badges for values such as ascent, difficulty, duration, and status when available.
+	- Keep compact fact badges for values such as length, ascent or gain, difficulty, duration, and status when available.
 	- Keep stacked attribute rows for values such as surface, use, type, and class below the primary facts.
+	- The secondary attribute section should stay visually lightweight; do not reintroduce a tinted background block behind it.
 - Elevation profile creation currently depends on guarded widget creation in `DetailPanel`:
 	- Build the `ElevationProfile` input from a valid `Graphic`, not from the raw trail model.
 	- Validate that selected trail geometry is a polyline with at least one path and at least two vertices before creating the widget.
@@ -85,6 +87,7 @@
 	- Selected park: filter park layer to selected object id and render outline-only highlight.
 	- Selected trail: filter trail layer to selected object id and render selected trail highlight.
 	- Non-selected park/trail features should be hidden while selected feature highlights remain visible.
+	- Other polygon layers that overlap the selected park should be temporarily hidden during active park selection so the selected park interior never regains a solid fill in 3D.
 	- When a trail is selected, reduce the park outline emphasis so the trail highlight remains visually dominant.
 	- Clearing selection must restore layer filters/opacity defaults.
 	- The selected park source polygon must not show a solid fill when zoomed in.

@@ -18,8 +18,9 @@ import ElevationProfile from "@arcgis/core/widgets/ElevationProfile";
 import ElevationProfileLineGround from "@arcgis/core/widgets/ElevationProfile/ElevationProfileLineGround";
 import Graphic from "@arcgis/core/Graphic";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
+import * as geodeticLengthOperator from "@arcgis/core/geometry/operators/geodeticLengthOperator.js";
 import config from "../config";
-import { State, Trail } from "../types";
+import { DistanceUnit, State, Trail } from "../types";
 
 import "../../style/detail-panel.scss";
 
@@ -89,6 +90,64 @@ export default class SelectionPanel {
     return Boolean(normalized) && normalized.toLowerCase() !== "unknown";
   }
 
+  private formatDecimal(value: number, maximumFractionDigits = 1): string {
+    return new Intl.NumberFormat("en-US", {
+      maximumFractionDigits,
+      minimumFractionDigits: value < 10 ? 1 : 0,
+    }).format(value);
+  }
+
+  private formatDistance(value: number, unit: DistanceUnit): string {
+    const maximumFractionDigits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+    return `${this.formatDecimal(value, maximumFractionDigits)} ${unit}`;
+  }
+
+  private async deriveTrailLength(trail: Trail): Promise<string | null> {
+    const geometry = trail?.geometry;
+    if (geometry?.type !== "polyline") {
+      return null;
+    }
+
+    try {
+      if (!geodeticLengthOperator.isLoaded()) {
+        await geodeticLengthOperator.load();
+      }
+
+      const length = geodeticLengthOperator.execute(geometry, { unit: "miles" });
+      if (!Number.isFinite(length) || length <= 0) {
+        return null;
+      }
+
+      return this.formatDistance(length, "mi");
+    } catch {
+      return null;
+    }
+  }
+
+  private async buildTrailMetricSummary(trail: Trail) {
+    const gainText =
+      typeof trail.ascent === "number" && Number.isFinite(trail.ascent) && trail.ascent > 0
+        ? `${this.formatDecimal(trail.ascent, 0)} m gain`
+        : null;
+
+    if (
+      typeof trail.length === "number" &&
+      Number.isFinite(trail.length) &&
+      trail.length > 0 &&
+      trail.lengthUnit
+    ) {
+      return {
+        gainText,
+        lengthText: this.formatDistance(trail.length, trail.lengthUnit),
+      };
+    }
+
+    return {
+      gainText,
+      lengthText: await this.deriveTrailLength(trail),
+    };
+  }
+
   private async refreshSelectedTrail() {
     const requestId = ++this.profileRequestId;
     const trail = this.state.selectedTrail;
@@ -100,13 +159,18 @@ export default class SelectionPanel {
       return;
     }
 
-    this.displayInfo(trail);
+    const metricSummary = await this.buildTrailMetricSummary(trail);
+    if (requestId !== this.profileRequestId || trail !== this.state.selectedTrail) {
+      return;
+    }
+
+    this.displayInfo(trail, metricSummary);
     await this.createElevationProfile(trail, requestId);
   }
 
-  displayInfo(trail: Trail): void {
+  displayInfo(trail: Trail, metricSummary): void {
     this.detailTitle.textContent = trail.name;
-    this.createInfograph(trail);
+    this.createInfograph(trail, metricSummary);
     const description = [trail.description, trail.seasonalDescription].find((value) => {
       return this.isMeaningful(value);
     });
@@ -211,7 +275,7 @@ export default class SelectionPanel {
     }
   }
 
-  createInfograph(trail) {
+  createInfograph(trail, metricSummary) {
     const status = {
       Closed: {
         icon: "fa fa-calendar-times-o",
@@ -224,8 +288,11 @@ export default class SelectionPanel {
     };
     const statusInfo = status[trail.status] || null;
     const primaryFacts = [
-      trail.ascent
-        ? `<span class="infograph"><span class="fa fa-line-chart" aria-hidden="true"></span> ${trail.ascent} m</span>`
+      metricSummary?.lengthText
+        ? `<span class="infograph"><span class="fa fa-arrows-h" aria-hidden="true"></span> ${metricSummary.lengthText}</span>`
+        : "",
+      metricSummary?.gainText
+        ? `<span class="infograph"><span class="fa fa-line-chart" aria-hidden="true"></span> ${metricSummary.gainText}</span>`
         : "",
       this.isMeaningful(trail.difficulty)
         ? `<span class="infograph"><span class="fa fa-wrench" aria-hidden="true"></span> ${trail.difficulty}</span>`

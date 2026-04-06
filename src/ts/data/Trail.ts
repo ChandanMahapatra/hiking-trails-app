@@ -16,7 +16,7 @@
 
 import Polyline from "@arcgis/core/geometry/Polyline";
 import State from "../State";
-import { EntityId } from "../types";
+import { DistanceUnit, EntityId } from "../types";
 
 export default class Trail {
   geometry: Polyline;
@@ -30,6 +30,8 @@ export default class Trail {
   walktime?: number;
   status?: string;
   ascent?: number;
+  length?: number;
+  lengthUnit?: DistanceUnit | null;
   description?: string;
   surface?: string;
   trailType?: string;
@@ -50,6 +52,8 @@ export default class Trail {
     this.walktime = normalized.walktime;
     this.status = normalized.status;
     this.ascent = normalized.ascent;
+    this.length = normalized.length;
+    this.lengthUnit = normalized.lengthUnit;
     this.description = normalized.description;
     this.surface = normalized.surface;
     this.trailType = normalized.trailType;
