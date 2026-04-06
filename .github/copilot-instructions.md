@@ -26,6 +26,7 @@
 	- Do not require `SceneElement.ready` to resolve before building the UI.
 	- Retry trail initialization briefly when map/layer readiness lags.
 	- If `state.parksLayer` / `state.trailsLayer` are missing, infer them again from `state.view.map.allLayers` in `trailManager` before returning empty data.
+	- `trailManager.initTrails()` currently awaits `assignParksToTrails()` before re-publishing `state.trails`; do not regress to a background-only park-assignment path that allows the UI and SceneView filters to race ahead of trail association.
 - Authentication safety:
 	- Never hardcode expired ArcGIS tokens or force an API key.
 	- Only set `esriConfig.apiKey` when a valid key is explicitly provided.
@@ -64,6 +65,10 @@
 	- Duplicate display names should be clarified in the UI, not removed from state.
 - Selected-park source trails must remain visible in both 2D and 3D.
 	- In SceneView, the source trails layer now needs temporary elevation handling during active selection so filtered trails remain visible above terrain.
+- Recent implementation direction from the latest commits and follow-up fixes must stay intact:
+	- Keep the overlapping-park suppression path, trail-length fallback behavior, and 3D selected-trail wall highlight/detail layout work.
+	- Keep the current 3D selection/UI fixes and do not regress back to source-layer-only park-selected trail rendering in SceneView.
+	- Treat reports where 2D works but 3D fails as SceneView rendering or camera issues first, not as trail-association failures by default.
 
 ## Current implementation context
 - Selected-only map presentation currently depends on source-layer filtering plus a separate `highlightLayer` in `SceneElement`:
@@ -76,10 +81,22 @@
 - Selected-park source-trail presentation now has a view-specific requirement:
 	- When a park or trail is actively selected, force the inferred trails layer visible instead of restoring an originally hidden WebMap visibility state.
 	- In `SceneView`, temporarily set the source trails layer elevation to `relative-to-ground` with a small offset so park-selected trail lines stay visible above terrain.
+	- In `SceneView`, park-selected trails no longer rely on the filtered source layer alone:
+		- `SceneElement` now uses a dedicated `parkTrailHighlightLayer` `GraphicsLayer` overlay for park-only browsing.
+		- Keep park-selected overlay graphics built from render-safe polylines that strip source Z values before drawing.
+		- Keep the filtered source trails layer visible but partially faded during park-only selection in 3D; do not make it the only visible treatment again.
+		- Keep the current tuned defaults in `config.selection` for 3D park-selected trail offset and width unless runtime QA justifies another change.
 	- Restore the original trails-layer elevation info when selection clears or when the active view is 2D.
+	- Park-selection navigation in `SceneView` now has a trail-aware fallback order:
+		- Prefer the combined extent center of associated trail geometries with a capped 3D scale.
+		- Fall back to the associated trail geometries or the park polygon only when needed.
 - Selected trail emphasis currently differs by view type:
 	- In `SceneView`, the selected trail uses a volumetric `line-3d` path symbol with a `quad` profile for a wall-like 3D highlight.
 	- In `MapView`, the selected trail falls back to a simple flat line highlight.
+	- In `SceneView`, selected-trail highlight graphics should use render-safe geometry rather than the raw source polyline when source Z values may be unreliable.
+	- Preserve the current distinction between geometry sanitation and wall sizing:
+		- First prevent spike artifacts by stripping problematic Z values for the highlight graphic.
+		- Then keep wall height bounded through `config.selection` rather than compensating with exaggerated geometry.
 - Trail detail layout currently groups selected-trail information into separate fact and attribute sections:
 	- Keep compact fact badges for values such as length, ascent or gain, difficulty, duration, and status when available.
 	- Keep stacked attribute rows for values such as surface, use, type, and class below the primary facts.
@@ -99,9 +116,13 @@
 - Park/trail selection from combobox or map click must update map visibility consistently:
 	- Selected park: filter park layer to selected object id and render outline-only highlight.
 	- Selected trail: filter trail layer to selected object id and render selected trail highlight.
+	- When both a park and a trail are active, selected-trail filtering must take precedence over the broader park-selected source-trail filter.
 	- Non-selected park/trail features should be hidden while selected feature highlights remain visible.
 	- Other polygon layers that overlap the selected park should be temporarily hidden during active park selection so the selected park interior never regains a solid fill in 3D.
 	- When a trail is selected, reduce the park outline emphasis so the trail highlight remains visually dominant.
+	- In `SceneView`, park-only selection should show both:
+		- a filtered, partially faded source trails layer for data continuity, and
+		- the dedicated park-trail overlay for visual discoverability.
 	- Clearing selection must restore layer filters/opacity defaults.
 	- The selected park source polygon must not show a solid fill when zoomed in.
 
@@ -135,7 +156,9 @@ Run these checks after any change to data loading, combobox logic, or selection 
 		- Non-selected features are hidden while highlight graphics remain visible.
 		- The selected park outline becomes faint when a trail is selected so the trail highlight is visually dominant.
 9. Clear selection and confirm layer filters/opacity reset to defaults.
-10. Switch between 3D and 2D and confirm selected park/trail context is preserved when possible.
-11. Validate build health:
+10. In 3D, explicitly test problem parks such as Acadia, Badlands, Biscayne, and Denali and confirm park-selected trails are visible before selecting an individual trail.
+11. In 3D, select problematic Denali trails such as Eielson Visitor Center Campus Trails and Mountain Vista Area Trails and confirm the selected-trail highlight no longer shows isolated spike or unrealistic height artifacts at individual vertices.
+12. Switch between 3D and 2D and confirm selected park/trail context is preserved when possible.
+13. Validate build health:
 	- `npm run type-check`
 	- `npm run build`
