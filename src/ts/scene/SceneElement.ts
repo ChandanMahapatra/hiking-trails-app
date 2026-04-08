@@ -20,6 +20,9 @@ import Graphic from "@arcgis/core/Graphic";
 import Polyline from "@arcgis/core/geometry/Polyline";
 import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
 import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
+import LabelClass from "@arcgis/core/layers/support/LabelClass";
+import LabelSymbol3D from "@arcgis/core/symbols/LabelSymbol3D";
+import TextSymbol3DLayer from "@arcgis/core/symbols/TextSymbol3DLayer";
 import MapView from "@arcgis/core/views/MapView";
 import SceneView from "@arcgis/core/views/SceneView";
 import SunLighting from "@arcgis/core/webscene/SunLighting";
@@ -30,6 +33,11 @@ import { getTrailParkField, inferLayersFromMap } from "../data/trailManager";
 import { ArcGISView, State, Trail } from "../types";
 
 const ACTIVE_VIEW_ELEMENT_ID = "activeArcgisView";
+const ADMIN_BOUNDARIES_GROUP_TITLE_PATTERN =
+  /^Administrative Boundaries of National Park System Units$/i;
+const NPS_TRACTS_TITLE_PATTERN = /^Nps tracts$/i;
+const NPS_BOUNDARY_CENTROIDS_TITLE_PATTERN = /^Nps boundary centroids$/i;
+const USA_NPS_LANDS_TITLE_PATTERN = /^USA National Park Service Lands$/i;
 
 type RemovableHandle = { remove: () => void };
 type ArcGISViewElement = HTMLElement & {
@@ -188,7 +196,7 @@ export default class SceneElement {
       .filter(Boolean) as ViewBoundControl[];
 
     if (home) {
-      home.viewpoint = this.getConfiguredViewpoint();
+      home.viewpoint = this.getConfiguredViewpoint(this.state.viewMode);
     }
 
     return {
@@ -225,11 +233,13 @@ export default class SceneElement {
     this.sanitizeSceneViewLabelPlacement();
 
     this.resolveLayers();
+    this.applyConfiguredPolygonRenderers();
+    this.applyConfiguredParkLabels(this.state.viewMode);
     this.captureLayerDefaults();
     this.state.trailsLayer = this.trailsLayer;
     this.state.parksLayer = this.parksLayer;
     this.normalizeActiveBasemap(this.state.viewMode);
-    await this.mountView(this.state.viewMode, this.getConfiguredViewpoint());
+    await this.mountView(this.state.viewMode, this.getConfiguredViewpoint(this.state.viewMode));
 
     if (!this.view || this.destroyed) {
       return;
@@ -315,6 +325,7 @@ export default class SceneElement {
 
     try {
       await this.destroyCurrentView();
+      this.applyConfiguredParkLabels(viewMode);
       await this.mountView(viewMode, viewpoint);
 
       if (!this.view || this.destroyed || this.viewModeChanged(viewMode)) {
@@ -365,7 +376,7 @@ export default class SceneElement {
     });
 
     if (this.controls.home) {
-      this.controls.home.viewpoint = this.getConfiguredViewpoint();
+      this.controls.home.viewpoint = this.getConfiguredViewpoint(this.state.viewMode);
     }
 
     if (this.controls.navigationToggle) {
@@ -481,8 +492,11 @@ export default class SceneElement {
     this.map.basemap = Basemap.fromId(fallbackId);
   }
 
-  private getConfiguredViewpoint() {
-    return new Viewpoint(config.view.startupViewpoint as any);
+  private getConfiguredViewpoint(viewMode: "3d" | "2d" = this.state.viewMode) {
+    const viewpointConfig =
+      (config.view as any).startupViewpoints?.[viewMode] || (config.view as any).startupViewpoint;
+
+    return new Viewpoint(viewpointConfig as any);
   }
 
   private syncBasemapGallerySource() {
@@ -585,6 +599,357 @@ export default class SceneElement {
     this.otherPolygonLayers = (inferredLayers.polygonLayers || []).filter((layer) => {
       return layer !== this.parksLayer;
     }) as FeatureLayer[];
+  }
+
+  private applyConfiguredPolygonRenderers() {
+    const npsTractsLayer = this.findFeatureLayer(
+      NPS_TRACTS_TITLE_PATTERN,
+      "polygon",
+      ADMIN_BOUNDARIES_GROUP_TITLE_PATTERN
+    );
+    if (npsTractsLayer) {
+      const renderer = this.createConfiguredNpsTractsRenderer(npsTractsLayer);
+      if (renderer) {
+        npsTractsLayer.renderer = renderer as any;
+      }
+    }
+
+    const usaNpsLandsLayer = this.findFeatureLayer(
+      USA_NPS_LANDS_TITLE_PATTERN,
+      "polygon"
+    );
+    if (usaNpsLandsLayer) {
+      const renderer = this.createConfiguredNpsLandsRenderer(usaNpsLandsLayer);
+      if (renderer) {
+        usaNpsLandsLayer.renderer = renderer as any;
+      }
+    }
+  }
+
+  private applyConfiguredParkLabels(viewMode: "3d" | "2d" = this.state.viewMode) {
+    const centroidLayer = this.findFeatureLayer(
+      NPS_BOUNDARY_CENTROIDS_TITLE_PATTERN,
+      "point",
+      ADMIN_BOUNDARIES_GROUP_TITLE_PATTERN
+    );
+    if (!centroidLayer) {
+      return;
+    }
+
+    centroidLayer.labelsVisible = true;
+    centroidLayer.labelingInfo = [this.createConfiguredParkLabelClass(viewMode)] as any;
+  }
+
+  private createConfiguredParkLabelClass(viewMode: "3d" | "2d" = this.state.viewMode) {
+    const labelExpression =
+      "When(IsEmpty($feature.PARKNAME), Trim($feature.UNIT_NAME), Trim($feature.PARKNAME))";
+    const baseLabelClass = {
+      labelPlacement: "above-center" as const,
+      where: "UNIT_TYPE = 'National Park'",
+      deconflictionStrategy: "static" as const,
+      labelExpressionInfo: {
+        expression: labelExpression,
+      },
+    };
+
+    if (viewMode === "3d") {
+      return new LabelClass({
+        ...baseLabelClass,
+        symbol: new LabelSymbol3D({
+          symbolLayers: [
+            new TextSymbol3DLayer({
+              material: {
+                color: [255, 252, 244, 1],
+              },
+              halo: {
+                color: [28, 28, 28, 0.95],
+                size: 2.5,
+              },
+              font: {
+                family: "Avenir Next",
+                weight: "bold",
+              },
+              size: 15,
+            }),
+          ],
+          verticalOffset: {
+            screenLength: 70,
+            maxWorldLength: 30000,
+            minWorldLength: 2000,
+          },
+          callout: {
+            type: "line",
+            color: [255, 252, 244, 0.9],
+            size: 1,
+            border: {
+              color: [28, 28, 28, 0.9],
+            },
+          },
+        }),
+      });
+    }
+
+    return new LabelClass({
+      ...baseLabelClass,
+      symbol: {
+        type: "text",
+        color: "white",
+        haloColor: [38, 38, 38, 1],
+        haloSize: 2.5,
+        font: {
+          family: "Avenir Next",
+          size: 13,
+          weight: "bold",
+        },
+      },
+    });
+  }
+
+  private findFeatureLayer(
+    titlePattern: RegExp,
+    geometryType: "polygon" | "point" | "polyline",
+    parentTitlePattern?: RegExp
+  ) {
+    return (
+      this.map.allLayers
+        ?.toArray()
+        .find((layer) => {
+          if (!(layer instanceof FeatureLayer) || layer.geometryType !== geometryType) {
+            return false;
+          }
+
+          if (!titlePattern.test(String(layer.title || ""))) {
+            return false;
+          }
+
+          if (!parentTitlePattern) {
+            return true;
+          }
+
+          return parentTitlePattern.test(String((layer as any).parent?.title || ""));
+        }) as FeatureLayer | undefined
+    ) || null;
+  }
+
+  private createConfiguredNpsTractsRenderer(layer: FeatureLayer) {
+    const sourceRenderer = layer.renderer as any;
+    if (!sourceRenderer || sourceRenderer.type !== "unique-value") {
+      return null;
+    }
+
+    const tractPalette = config.colors.npsPolygonPalette.filter((color) => {
+      return color !== config.colors.npsLandsFill;
+    });
+    const orderedValues = this.getOrderedRendererValues(sourceRenderer, layer);
+    const fallbackColor = tractPalette[tractPalette.length - 1];
+    const fieldName =
+      sourceRenderer.field ||
+      sourceRenderer.field1 ||
+      (layer as any).typeIdField ||
+      "Interest";
+
+    return {
+      type: "unique-value",
+      field: fieldName,
+      defaultSymbol: this.cloneSymbol(sourceRenderer.defaultSymbol),
+      defaultLabel: sourceRenderer.defaultLabel,
+      fieldDelimiter: sourceRenderer.fieldDelimiter,
+      valueExpression: sourceRenderer.valueExpression,
+      valueExpressionTitle: sourceRenderer.valueExpressionTitle,
+      legendOptions: sourceRenderer.legendOptions
+        ? { ...sourceRenderer.legendOptions }
+        : undefined,
+      uniqueValueInfos: orderedValues.map((value, index) => {
+        const sourceInfo = this.findSourceUniqueValueInfo(sourceRenderer, value);
+        const fillColor = tractPalette[index] || fallbackColor;
+        const symbol = this.clonePolygonSymbolWithFillColor(
+          sourceInfo?.symbol || sourceRenderer.defaultSymbol,
+          fillColor
+        );
+
+        return {
+          value,
+          label: this.formatRendererLabel(sourceInfo?.label, value),
+          description: sourceInfo?.description,
+          symbol:
+            symbol ||
+            ({
+              type: "simple-fill",
+              color: fillColor,
+              outline: {
+                color: [26, 26, 26, 255],
+                width: 0.75,
+              },
+            } as any),
+        };
+      }),
+    };
+  }
+
+  private createConfiguredNpsLandsRenderer(layer: FeatureLayer) {
+    const sourceRenderer = layer.renderer as any;
+    const symbol = this.clonePolygonSymbolWithFillColor(
+      sourceRenderer?.symbol,
+      config.colors.npsLandsFill
+    );
+
+    if (sourceRenderer?.type === "simple" && symbol) {
+      const renderer = sourceRenderer.clone ? sourceRenderer.clone() : { ...sourceRenderer };
+      renderer.symbol = symbol;
+      return renderer;
+    }
+
+    return {
+      type: "simple",
+      symbol: symbol || {
+        type: "simple-fill",
+        color: config.colors.npsLandsFill,
+        outline: {
+          color: [26, 26, 26, 0.35],
+          width: 0.75,
+        },
+      },
+    };
+  }
+
+  private getOrderedRendererValues(renderer: any, layer: FeatureLayer) {
+    const typeValues = ((layer as any).types || [])
+      .map((type: any) => {
+        return this.normalizeRendererValue(type?.id ?? type?.name);
+      })
+      .filter((value: string | null): value is string => {
+        return Boolean(value);
+      });
+
+    if (typeValues.length) {
+      return typeValues;
+    }
+
+    const orderedValues: string[] = [];
+    const addValue = (value: any) => {
+      const normalizedValue = this.normalizeRendererValue(value);
+      if (normalizedValue && !orderedValues.includes(normalizedValue)) {
+        orderedValues.push(normalizedValue);
+      }
+    };
+
+    if (Array.isArray(renderer?.uniqueValueInfos)) {
+      renderer.uniqueValueInfos.forEach((info) => {
+        this.getUniqueValueInfoValues(info).forEach(addValue);
+      });
+    }
+
+    if (Array.isArray(renderer?.uniqueValueGroups)) {
+      renderer.uniqueValueGroups.forEach((group) => {
+        group?.classes?.forEach((classInfo) => {
+          this.getUniqueValueInfoValues(classInfo).forEach(addValue);
+        });
+      });
+    }
+
+    return orderedValues;
+  }
+
+  private findSourceUniqueValueInfo(renderer: any, value: string) {
+    const normalizedValue = this.normalizeRendererValue(value);
+    if (!normalizedValue) {
+      return null;
+    }
+
+    const sourceInfos = [
+      ...(Array.isArray(renderer?.uniqueValueInfos) ? renderer.uniqueValueInfos : []),
+      ...(Array.isArray(renderer?.uniqueValueGroups)
+        ? renderer.uniqueValueGroups.flatMap((group) => {
+            return Array.isArray(group?.classes) ? group.classes : [];
+          })
+        : []),
+    ];
+
+    return (
+      sourceInfos.find((info) => {
+        return this.getUniqueValueInfoValues(info).includes(normalizedValue);
+      }) || null
+    );
+  }
+
+  private formatRendererLabel(label: any, fallbackValue: string) {
+    const normalizedLabel = String(label ?? "").trim();
+    if (normalizedLabel) {
+      return normalizedLabel;
+    }
+
+    return String(fallbackValue).trim();
+  }
+
+  private getUniqueValueInfoValues(info: any) {
+    const values: string[] = [];
+
+    if (info?.value !== undefined) {
+      const normalizedValue = this.normalizeRendererValue(info.value);
+      if (normalizedValue) {
+        values.push(normalizedValue);
+      }
+    }
+
+    if (Array.isArray(info?.values)) {
+      info.values.forEach((value) => {
+        const candidate = Array.isArray(value) ? value[0] : value;
+        const normalizedValue = this.normalizeRendererValue(candidate);
+        if (normalizedValue) {
+          values.push(normalizedValue);
+        }
+      });
+    }
+
+    return Array.from(new Set(values));
+  }
+
+  private normalizeRendererValue(value: any) {
+    const normalizedValue = String(value ?? "").trim();
+    return normalizedValue || null;
+  }
+
+  private clonePolygonSymbolWithFillColor(symbol: any, fillColor: string) {
+    if (!symbol) {
+      return null;
+    }
+
+    const nextSymbol = symbol.clone ? symbol.clone() : { ...symbol };
+
+    if (nextSymbol.type === "simple-fill") {
+      nextSymbol.color = fillColor;
+      return nextSymbol;
+    }
+
+    if (Array.isArray(nextSymbol.symbolLayers)) {
+      nextSymbol.symbolLayers = nextSymbol.symbolLayers.map((symbolLayer, index) => {
+        if (index !== 0) {
+          return symbolLayer;
+        }
+
+        return {
+          ...symbolLayer,
+          material: symbolLayer?.material
+            ? {
+                ...symbolLayer.material,
+                color: fillColor,
+              }
+            : symbolLayer?.material,
+        };
+      });
+      return nextSymbol;
+    }
+
+    nextSymbol.color = fillColor;
+    return nextSymbol;
+  }
+
+  private cloneSymbol(symbol: any) {
+    if (!symbol) {
+      return null;
+    }
+
+    return symbol.clone ? symbol.clone() : { ...symbol };
   }
 
   private captureLayerDefaults() {
@@ -717,6 +1082,20 @@ export default class SceneElement {
   }
 
   private createSelectedParkTrailSymbol() {
+    const sourceRenderer = (this.originalTrailsRenderer || this.trailsLayer?.renderer) as any;
+    const sourceSymbol = sourceRenderer?.type === "simple" ? sourceRenderer.symbol : null;
+    const clonedSymbol = sourceSymbol?.clone ? sourceSymbol.clone() : sourceSymbol ? { ...sourceSymbol } : null;
+
+    if (clonedSymbol?.type === "simple-line") {
+      clonedSymbol.width =
+        this.view?.type === "3d"
+          ? config.selection.trailSourceSelectionWidth3d
+          : config.selection.trailSourceSelectionWidth2d;
+      clonedSymbol.cap = "round";
+      clonedSymbol.join = "round";
+      return clonedSymbol as any;
+    }
+
     return {
       type: "simple-line",
       color: config.colors.defaultTrail,
@@ -726,13 +1105,6 @@ export default class SceneElement {
           : config.selection.trailSourceSelectionWidth2d,
       cap: "round",
       join: "round",
-    } as any;
-  }
-
-  private createSelectedParkTrailsRenderer() {
-    return {
-      type: "simple",
-      symbol: this.createSelectedParkTrailSymbol(),
     } as any;
   }
 
@@ -785,13 +1157,15 @@ export default class SceneElement {
       return;
     }
 
-    this.parkTrailHighlightLayer.elevationInfo =
-      this.view?.type === "3d"
-        ? ({
-            mode: "relative-to-ground",
-            offset: config.selection.trailSourceSelectionOffset3d,
-          } as any)
-        : (null as any);
+    this.parkTrailHighlightLayer.elevationInfo = this.getParkTrailElevationInfo() as any;
+  }
+
+  private getParkTrailElevationInfo() {
+    return this.view?.type === "3d"
+      ? ({
+          mode: "on-the-ground",
+        } as const)
+      : null;
   }
 
   private getCombinedExtent(geometries: __esri.Polyline[]) {
@@ -962,17 +1336,14 @@ export default class SceneElement {
       } else if (hasSelectedPark) {
         this.trailsLayer.definitionExpression =
           this.getSelectedParkTrailExpression() || "1=0";
-        this.trailsLayer.renderer = this.createSelectedParkTrailsRenderer();
+        this.restoreLayerRenderer(this.trailsLayer, this.originalTrailsRenderer);
       } else {
         this.restoreLayerExpression(this.trailsLayer);
         this.restoreLayerRenderer(this.trailsLayer, this.originalTrailsRenderer);
       }
 
-      if (hasActiveSelection && this.view?.type === "3d") {
-        this.trailsLayer.elevationInfo = {
-          mode: "relative-to-ground",
-          offset: config.selection.trailSourceSelectionOffset3d,
-        } as any;
+      if (hasSelectedPark && !hasSelectedTrail) {
+        this.trailsLayer.elevationInfo = this.getParkTrailElevationInfo() as any;
       } else {
         this.restoreTrailsLayerElevationInfo();
       }

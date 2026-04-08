@@ -24,14 +24,37 @@ export default {
     webmapItemId: "5a94b21ff6e94d10ae61483c392bbf9b"
   },
   view: {
-    startupViewpoint: {
-      targetGeometry: {
-        type: "point",
-        longitude: -98.5795,
-        latitude: 39.8283,
-        spatialReference: { wkid: 4326 }
+    startupViewpoints: {
+      "2d": {
+        targetGeometry: {
+          type: "point",
+          longitude: -98.5795,
+          latitude: 39.8283,
+          spatialReference: { wkid: 4326 }
+        },
+        scale: 20000000
       },
-      scale: 20000000
+      "3d": {
+        targetGeometry: {
+          type: "extent",
+          xmin: -127,
+          ymin: 24,
+          xmax: -66,
+          ymax: 50,
+          spatialReference: { wkid: 4326 }
+        },
+        camera: {
+          position: {
+            longitude: -98.5795,
+            latitude: 39.8283,
+            z: 18000000,
+            spatialReference: { wkid: 4326 }
+          },
+          heading: 0,
+          tilt: 0
+        },
+        scale: 26000000
+      }
     },
     basemaps: {
       "3d": {
@@ -48,7 +71,6 @@ export default {
     parkOutlineWidth: 4,
     parkOutlineMutedWidth: 2,
     parkOutlineMutedOpacity: 0.4,
-    trailSourceSelectionOffset3d: 14,
     trailSourceSelectionWidth3d: 4,
     trailSourceSelectionWidth2d: 2,
     trailWallWidth: 3,
@@ -61,6 +83,17 @@ export default {
     defaultTrail: "#db5353",
     selectedTrail: "#f9a352",
     selectedParkFill: [0, 0, 0, 0],
-    selectedParkOutline: "#4da1ff"
+    selectedParkOutline: "#4da1ff",
+    npsPolygonPalette: [
+      "#8dd3c7",
+      "#ffffb3",
+      "#bebada",
+      "#fb8072",
+      "#80b1d3",
+      "#fdb462",
+      "#b3de69",
+      "#fccde5"
+    ],
+    npsLandsFill: "#b3de69"
   }
 };

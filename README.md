@@ -4,7 +4,13 @@ This application explores hiking trails across U.S. National Parks using the Arc
 
 This project builds on [Esri's hiking-trails-app](https://github.com/Esri/hiking-trails-app) by [Raluca Nicola](https://github.com/RalucaNicola), but the current product framing, data assumptions, and deployment flow are now specific to a U.S. National Parks experience.
 
-![US Hiking Trails Explorer](screenshots/screenshot1.PNG)
+## Screenshots
+
+The current screenshots show Acadia National Park with the Ocean Path trail selected in both supported view modes.
+
+| 3D selected trail | 2D selected trail |
+| --- | --- |
+| ![US Hiking Trails Explorer in 3D with a selected trail](screenshots/app-3d-trail-selected.png) | ![US Hiking Trails Explorer in 2D with a selected trail](screenshots/app-2d-trail-selected.png) |
 
 ## Features
 
@@ -28,6 +34,8 @@ This project builds on [Esri's hiking-trails-app](https://github.com/Esri/hiking
 
 * Active park and trail selections are reapplied after 3D/2D view switches, and the elevation profile is rebuilt against the current view so the panel remains consistent across mode changes.
 
+* In 3D park-only selection, the inferred trails layer now stays draped on the ground and keeps the original National Park Service trail symbology on the source layer while the dedicated overlay improves discoverability.
+
 * Vite now serves Calcite and ArcGIS component runtime assets directly from installed packages during development and copies them into `dist` during production builds and CI, so the app remains deployable as a static GitHub Pages site without committing generated runtime trees.
 
 * The trail detail area below the comboboxes now separates compact fact badges from stacked attribute rows such as surface, use, type, and class to improve readability.
@@ -35,6 +43,8 @@ This project builds on [Esri's hiking-trails-app](https://github.com/Esri/hiking
 * Active park selection now suppresses overlapping polygon layers from the source WebMap so the selected park interior stays clear in 3D while the blue outline remains the only visible park treatment.
 
 * Trail fact badges now prefer richer trip stats, including source length fields when available and a selected-trail geodetic distance fallback when they are not.
+
+* Home navigation is now view-mode-aware, so the initial mount and the Home control return to a continental U.S. map extent in 2D and a dedicated continental U.S. camera in 3D.
 
 ## Maps and layers used
 
@@ -70,7 +80,9 @@ Because the app intentionally infers layers from the configured web map, you can
 
 * Basemap controls remain component-driven. The collapsed basemap trigger stays aligned with the other top-right map controls, and the expanded gallery uses view-mode-specific sources rather than a single default gallery list.
 
-* Layer inference is biased toward the current NPS boundary layer because it exposes `UNIT_CODE` and `UNIT_TYPE`, which are needed for National Park filtering and park-to-trail association.
+* Layer inference is biased toward the current NPS boundary layer because it exposes `UNIT_CODE` and `UNIT_TYPE`, which are needed for National Park filtering and park-to-trail association, but the app still falls back to another compatible polygon parks layer when needed.
+
+* Top-right controls stay on official ArcGIS map components, including `arcgis-home`, `arcgis-zoom`, `arcgis-compass`, `arcgis-navigation-toggle`, `arcgis-basemap-gallery`, and `arcgis-legend` hosted inside `arcgis-expand` controls.
 
 ## Instructions
 
@@ -110,7 +122,7 @@ ArcGIS credentials are not committed in this repository. [src/ts/main.ts](./src/
 
 The following libraries, APIs, and data sources are used by this application:
 
-* [ArcGIS Maps SDK for JavaScript](https://developers.arcgis.com/javascript/) package runtime via `@arcgis/core` 5.0.15, `@arcgis/map-components` 5.0.15, and `@arcgis/common-components` 5.0.15.
+* [ArcGIS Maps SDK for JavaScript](https://developers.arcgis.com/javascript/) package runtime via the 5.x `@arcgis/core`, `@arcgis/map-components`, and `@arcgis/common-components` dependencies specified in `package.json`.
 * [Calcite Components](https://developers.arcgis.com/calcite-design-system/) for the searchable park and trail comboboxes and header controls.
 * ArcGIS WebMap item `5a94b21ff6e94d10ae61483c392bbf9b` as the default map source.
 * Park and trail feature layers supplied by that web map and inferred at runtime from layer geometry, titles, URLs, display fields, and field names.

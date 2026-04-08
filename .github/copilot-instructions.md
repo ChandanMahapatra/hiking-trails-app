@@ -18,12 +18,16 @@
 	- `arcgis-navigation-toggle`
 	- `arcgis-expand`
 	- `arcgis-basemap-gallery`
+	- `arcgis-legend`
 	- Do not reintroduce deprecated `@arcgis/core/widgets/*` controls for this UI.
 - Keep basemap switching on official ArcGIS map components and JS API behavior (not custom thumbnails or bespoke basemap pickers).
+- Keep the legend on official ArcGIS map components as a top-right `arcgis-expand` that hosts `arcgis-legend`; do not replace it with a custom legend UI.
 - Keep 3D as default, with optional 2D route/view switch while preserving user context when practical.
 
 ## Data model expectations
 - Infer park and trail layers from the web map at runtime.
+- Do not hardcode a dependency on the exact `Administrative Boundaries of National Park System Units` layer title.
+	- The current NPS boundary layer is preferred because it exposes fields such as `UNIT_CODE` and `UNIT_TYPE`, but the app should continue working with another compatible polygon parks layer when present.
 - Infer id/name fields heuristically from layer fields; avoid hard-coding field names.
 - If join fields are missing, fall back to spatial association between trail and park.
 - Gracefully degrade when park/trail layers are unavailable.
@@ -44,6 +48,9 @@
 ## UI/UX constraints
 - Do not reintroduce tabbed panels, complex filters, or extra pages.
 - Do not add custom themes/colors beyond existing design tokens and config colors.
+- Keep the current app-shell branding intact:
+	- Header app mark uses the Calcite `tour-pin-tear` icon.
+	- Browser/app icons come from the public favicon/app-icon assets, not ad hoc `src/...` references.
 - Prefer Calcite components already loaded in `index.html`.
 - Keep sidebar feedback clear while data is loading:
 	- Show an in-panel Calcite loading component while park/trail data is still initializing.
@@ -69,6 +76,7 @@
 - UI construction must not wait on `SceneElement.ready`; retry trail initialization briefly when the map is slow.
 - Layer inference and blank-label fallback must remain resilient because layer fields vary across web maps.
 - The current NPS boundary layer exposes `UNIT_TYPE`; when available, use it to keep the park list scoped to National Parks only.
+	- Treat that layer as the preferred park source, not as a hardcoded requirement by exact title.
 - ArcGIS component bootstrap is order-sensitive in the current package setup:
 	- Configure local asset paths for `@esri/calcite-components`, `@arcgis/common-components`, and `@arcgis/map-components` before importing or registering `arcgis-*` web components.
 	- Keep the current Vite asset pipeline intact: serve component assets directly from installed packages during development, and copy them into `dist` during production builds and CI so `map-components` and `common-components` assets remain available without committing generated runtime trees.
@@ -81,6 +89,9 @@
 		- Read the active host component's `view` back into shared state so existing selection, highlighting, and layer logic can continue using the raw View API.
 		- Bind the `arcgis-*` controls to the active view through each element's `view` property.
 		- Do not regress back to raw standalone `MapView` / `SceneView` construction or deprecated `@arcgis/core/widgets/*` controls for this UI.
+	- Keep the current top-right expand behavior:
+		- `arcgis-expand` controls for basemaps and legend should initialize collapsed.
+		- The legend stays in its own top-right `arcgis-expand` and uses `arcgis-legend` bound to the active view.
 - Vite dev/runtime stability now depends on explicit dedupe:
 	- Keep `vite.config.js` `resolve.dedupe` covering ArcGIS packages plus `lit`, `lit-html`, `lit-element`, and `@lit/reactive-element`.
 	- Treat reappearance of `Multiple versions of Lit loaded`, `Cannot read from private field`, or `Portal/Basemap is not a subclass of itself` as duplicate-runtime/bootstrap regressions first.
@@ -89,11 +100,15 @@
 	- The combobox rebuilds from scratch on park changes.
 	- Duplicate display names should be clarified in the UI, not removed from state.
 - Selected-park source trails must remain visible in both 2D and 3D.
-	- In SceneView, the source trails layer now needs temporary elevation handling during active selection so filtered trails remain visible above terrain.
+	- In SceneView, park-only trail browsing now needs terrain-hugging elevation handling during active selection so filtered trails stay draped on the ground instead of floating above terrain.
+	- Park-only selection should preserve the original National Park Service Trails symbology on the filtered source layer rather than recoloring that layer just because a park is active.
 - Recent implementation direction from the latest commits and follow-up fixes must stay intact:
 	- Keep the overlapping-park suppression path, trail-length fallback behavior, and 3D selected-trail wall highlight/detail layout work.
 	- Keep the current 3D selection/UI fixes and do not regress back to source-layer-only park-selected trail rendering in SceneView.
 	- Treat reports where 2D works but 3D fails as SceneView rendering or camera issues first, not as trail-association failures by default.
+	- Keep the current view-mode-aware home behavior:
+		- Initial view mount and `arcgis-home` should both use `config.view.startupViewpoints[viewMode]`.
+		- In 3D, the home control should return to a continental-US camera instead of a generic shared startup point.
 	- Keep the basemap gallery on an explicit view-mode-aware `source`.
 		- In `SceneView`, include scene-appropriate basemaps such as `topo-3d`, `navigation-3d`, and imagery options instead of relying on the default gallery source.
 		- In `MapView`, keep the gallery limited to 2D-safe basemaps such as `topo-vector`, `streets-navigation-vector`, and imagery options.
@@ -111,12 +126,15 @@
 	- Reapply selection zoom after 3D/2D view recreation so the active park or trail context is preserved visually, not just in state.
 - Selected-park source-trail presentation now has a view-specific requirement:
 	- When a park or trail is actively selected, force the inferred trails layer visible instead of restoring an originally hidden WebMap visibility state.
-	- In `SceneView`, temporarily set the source trails layer elevation to `relative-to-ground` with a small offset so park-selected trail lines stay visible above terrain.
+	- In `SceneView`, when only a park is selected, temporarily set the source trails layer elevation to `on-the-ground` so park-selected trail lines hug the terrain instead of floating above it.
+	- When only a park is selected, keep the filtered source trails layer on its original renderer instead of recoloring it just for park browsing.
 	- In `SceneView`, park-selected trails no longer rely on the filtered source layer alone:
 		- `SceneElement` now uses a dedicated `parkTrailHighlightLayer` `GraphicsLayer` overlay for park-only browsing.
 		- Keep park-selected overlay graphics built from render-safe polylines that strip source Z values before drawing.
+		- When possible, keep the park-selected overlay visually aligned with the original trail symbology by cloning the original simple-line trail symbol rather than forcing a different park-browsing color.
+		- If the original trail renderer cannot be reused directly, limit fallback styling changes to readability adjustments such as width, not a wholesale color swap by default.
 		- Keep the filtered source trails layer visible but partially faded during park-only selection in 3D; do not make it the only visible treatment again.
-		- Keep the current tuned defaults in `config.selection` for 3D park-selected trail offset and width unless runtime QA justifies another change.
+		- Prefer park-selected trail readability through renderer width, opacity, and overlay/source contrast rather than reintroducing a large 3D lift offset by default.
 	- Restore the original trails-layer elevation info when selection clears or when the active view is 2D.
 	- Park-selection navigation in `SceneView` now has a trail-aware fallback order:
 		- Prefer the combined extent center of associated trail geometries with a capped 3D scale.
@@ -138,9 +156,18 @@
 	- Validate that selected trail geometry is a polyline with at least one path and at least two vertices before creating the profile.
 	- Keep profile visualization enabled; setting `hideVisualization = true` removes the chart-hover scrub marker or orb from the trail path.
 	- If profile creation fails or the view is still switching/loading, show a concise in-panel fallback instead of leaving the panel blank.
+- Baseline NPS polygon styling and park labeling currently depend on `SceneElement` baseline configuration rather than temporary selection overrides:
+	- Keep `Nps tracts` on the configured unique-value palette in live service order; when available, use `layer.types` as the authoritative category order to avoid duplicate legend entries.
+	- Keep `USA National Park Service Lands` on its dedicated baseline fill color from config.
+	- Do not hide `Nps boundary centroids` with a transparent renderer; keep centroid features visible so park labels still have a visible point source.
+	- Park-name labels are view-mode-aware:
+		- In `MapView`, the centroid layer uses a readable 2D text label.
+		- In `SceneView`, the centroid layer uses a `LabelSymbol3D` with vertical offset and callout so park names remain legible above terrain.
+		- Reapply the configured centroid labeling on 2D/3D switches because the shared layer persists across view recreation.
 - Layer inference must continue preferring park/trail layers that expose join and designation fields used by the current NPS web map:
 	- Prefer park layers with `UNIT_CODE` and `UNIT_TYPE` when scoring polygon candidates.
 	- Prefer trail layers with `UNITCODE` when scoring polyline candidates.
+	- If the preferred NPS boundary layer is unavailable, continue inferring another compatible polygon parks layer instead of treating park loading as tied to one exact layer name.
 - SceneView labeling has a current limitation that must stay reflected in the implementation:
 	- Do not remap non-point `labelPlacement` values in SceneView to other guessed placements.
 	- For non-point layers, remove unsupported `labelPlacement` overrides instead of forcing values such as `above-center` or `center-center`.
@@ -203,13 +230,18 @@ Run these checks after any change to data loading, combobox logic, or selection 
 		- Non-selected features are hidden while highlight graphics remain visible.
 		- The selected park outline becomes faint when a trail is selected so the trail highlight is visually dominant.
 9. Clear selection and confirm layer filters/opacity reset to defaults.
-10. In 3D, explicitly test problem parks such as Acadia, Badlands, Biscayne, and Denali and confirm park-selected trails are visible before selecting an individual trail.
+10. In 3D, explicitly test problem parks such as Acadia, Badlands, Biscayne, and Denali and confirm park-selected trails are visible, stay draped on terrain, do not appear to float before selecting an individual trail, and keep the original National Park Service Trails symbology on the filtered source layer.
 11. In 3D, select problematic Denali trails such as Eielson Visitor Center Campus Trails and Mountain Vista Area Trails and confirm the selected-trail highlight no longer shows isolated spike or unrealistic height artifacts at individual vertices.
 12. Switch between 3D and 2D and confirm selected park/trail context is preserved when possible.
-13. Open the basemap gallery in both 3D and 2D and confirm:
+13. Confirm map reset behavior in both views:
+	- In 2D, the home control returns to the continental U.S. map framing.
+	- In 3D, the home control returns to the configured continental-U.S. camera instead of a generic global or off-center startup view.
+14. Open the basemap gallery and legend in both 3D and 2D and confirm:
 	- The collapsed basemap trigger matches the other top-right map controls at `32px x 32px`.
+	- The legend stays in its own top-right expand control and does not open by default.
 	- The expanded gallery panel is wide enough to avoid the previously squashed layout.
 	- In 3D, the gallery includes scene-oriented basemap choices instead of only 2D-style defaults.
-14. Validate build health:
+15. In 3D, confirm National Park names remain readable over the map surface and do not disappear after switching between 2D and 3D.
+16. Validate build health:
 	- `npm run type-check`
 	- `npm run build`
