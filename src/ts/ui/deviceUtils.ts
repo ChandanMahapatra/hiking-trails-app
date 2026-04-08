@@ -17,6 +17,7 @@
 import { Device, State } from "../types";
 
 const mqDesktop = window.matchMedia("(min-width: 601px)");
+let mediaListener: ((event: MediaQueryListEvent) => void) | null = null;
 
 function getMedia(): Device {
   if (mqDesktop.matches) {
@@ -27,10 +28,26 @@ function getMedia(): Device {
 
 export default {
   init(state: State) {
+    if (mediaListener) {
+      mqDesktop.removeEventListener("change", mediaListener);
+    }
+
     state.device = getMedia();
-    mqDesktop.addEventListener("change", () => {
+
+    mediaListener = () => {
       const media: Device = getMedia();
       state.device = media;
-    });
+    };
+
+    mqDesktop.addEventListener("change", mediaListener);
+  },
+
+  destroy() {
+    if (!mediaListener) {
+      return;
+    }
+
+    mqDesktop.removeEventListener("change", mediaListener);
+    mediaListener = null;
   },
 };

@@ -7,33 +7,25 @@
   <meta name='viewport' content='width=device-width, initial-scale=1'>
 
   <meta name='theme-color' content='#b5e2c1'>
-  <meta name='description' content='Hiking trails Swiss National Park'>
+  <meta name='description' content='Explore hiking trails across U.S. National Parks in 3D and 2D with live trail details and elevation profiles.'>
   <meta name='author' content='Raluca Nicola, ESRI'>
 
-  <link rel="apple-touch-icon" sizes="57x57" href="./src/img/apple-icon-57x57.png">
-  <link rel="apple-touch-icon" sizes="60x60" href="./src/img/apple-icon-60x60.png">
-  <link rel="apple-touch-icon" sizes="72x72" href="./src/img/apple-icon-72x72.png">
-  <link rel="apple-touch-icon" sizes="76x76" href="./src/img/apple-icon-76x76.png">
-  <link rel="apple-touch-icon" sizes="114x114" href="./src/img/apple-icon-114x114.png">
-  <link rel="apple-touch-icon" sizes="120x120" href="./src/img/apple-icon-120x120.png">
-  <link rel="apple-touch-icon" sizes="144x144" href="./src/img/apple-icon-144x144.png">
-  <link rel="apple-touch-icon" sizes="152x152" href="./src/img/apple-icon-152x152.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="./src/img/apple-icon-180x180.png">
-  <link rel="icon" type="image/png" sizes="192x192"  href="./src/img/android-icon-192x192.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="./src/img/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="96x96" href="./src/img/favicon-96x96.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="./src/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="./android-chrome-192x192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png">
   <meta name="msapplication-TileColor" content="#ffffff">
-  <meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+  <meta name="msapplication-TileImage" content="./ms-icon-144x144.png">
   <meta name="theme-color" content="#ffffff">
 
-  <meta name='apple-mobile-web-app-title' content='Hiking trails'>
+  <meta name='apple-mobile-web-app-title' content='US Hiking Trails Explorer'>
   <meta name='mobile-web-app-capable' content='yes'>
   <meta name='apple-mobile-web-app-status-bar-style' content='#b5e2c1'>
 
-  <title>Hiking trails</title>
+  <title>US Hiking Trails Explorer</title>
 
-  <link href='https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300,700' rel='stylesheet'>
+  <link rel="stylesheet" href="./src/style/app.css">
   <script>
     // Prevent duplicate Calcite runtimes from redefining calciteConfig.version.
     window.calciteConfig = window.calciteConfig || {
@@ -47,7 +39,10 @@
 
 <body>
   <header class="appHeader">
-    <h1>Hiking Trails Explorer</h1>
+    <div class="appHeaderBrand">
+      <calcite-icon icon="tour-pin-tear" scale="m" aria-hidden="true"></calcite-icon>
+      <h1>US Hiking Trails Explorer</h1>
+    </div>
     <div class="headerActions">
       <calcite-label layout="inline" class="viewModeControl">
         3D
@@ -58,6 +53,30 @@
   </header>
 
   <div id='scenePanel'></div>
+  <div id="mapControls" class="mapControls" aria-label="Map controls" hidden>
+    <arcgis-home id="homeControl" label="Home"></arcgis-home>
+    <arcgis-zoom id="zoomControl" label="Zoom"></arcgis-zoom>
+    <arcgis-compass id="compassControl" label="Compass"></arcgis-compass>
+    <arcgis-navigation-toggle id="navigationToggleControl" label="Navigation toggle" hidden></arcgis-navigation-toggle>
+    <arcgis-expand
+      id="basemapExpandControl"
+      label="Basemap gallery"
+      expand-icon="basemap"
+      mode="floating"
+      placement="bottom-end"
+    >
+      <arcgis-basemap-gallery id="basemapGalleryControl" label="Basemap gallery"></arcgis-basemap-gallery>
+    </arcgis-expand>
+    <arcgis-expand
+      id="legendExpandControl"
+      label="Legend"
+      expand-icon="legend"
+      mode="floating"
+      placement="bottom-end"
+    >
+      <arcgis-legend id="legendControl" label="Legend"></arcgis-legend>
+    </arcgis-expand>
+  </div>
 
   <div class='menuPanel'>
     <h2 class='panelTitle'>Parks and Trails</h2>

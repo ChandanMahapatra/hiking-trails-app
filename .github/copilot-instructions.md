@@ -2,7 +2,7 @@
 
 ## Product intent
 - The app context is U.S. National Parks hiking trails, not the legacy Swiss National Park demo.
-- Keep documentation and UI copy aligned with the current product framing: **Hiking Trails Explorer** with a U.S.-wide parks-and-trails experience.
+- Keep documentation and UI copy aligned with the current product framing: **US Hiking Trails Explorer** with a U.S.-wide parks-and-trails experience.
 - Keep the app minimal: top header with app name and controls, plus one left side panel.
 - Side panel title must remain **Parks and Trails**.
 - Use two searchable Calcite dropdowns in this order: park first, trail second.
@@ -10,8 +10,16 @@
 
 ## Mapping requirements
 - Primary map source is Web Map item `5a94b21ff6e94d10ae61483c392bbf9b`.
-- Use ArcGIS Maps SDK for JavaScript `4.34`.
-- Keep basemap switching through an official JS API widget (not custom thumbnails).
+- Use the current package-based ArcGIS Maps SDK runtime pinned in `package.json` (`@arcgis/core` / `@arcgis/map-components` 5.x); do not reintroduce the old CDN-based `4.34` bootstrap.
+- Keep the top-right map controls on official ArcGIS map components:
+	- `arcgis-home`
+	- `arcgis-zoom`
+	- `arcgis-compass`
+	- `arcgis-navigation-toggle`
+	- `arcgis-expand`
+	- `arcgis-basemap-gallery`
+	- Do not reintroduce deprecated `@arcgis/core/widgets/*` controls for this UI.
+- Keep basemap switching on official ArcGIS map components and JS API behavior (not custom thumbnails or bespoke basemap pickers).
 - Keep 3D as default, with optional 2D route/view switch while preserving user context when practical.
 
 ## Data model expectations
@@ -21,12 +29,14 @@
 - Gracefully degrade when park/trail layers are unavailable.
 - Keep documentation and code comments accurate to the current implementation:
 	- Do not reintroduce legacy README claims about Swiss National Park data, Flickr images, or amCharts elevation profiles.
-	- Elevation profiles are provided by the ArcGIS `ElevationProfile` widget.
+	- Elevation profiles are rendered through the `arcgis-elevation-profile` map component backed by ArcGIS ElevationProfile behavior.
 - Keep trail loading resilient:
 	- Do not require `SceneElement.ready` to resolve before building the UI.
 	- Retry trail initialization briefly when map/layer readiness lags.
 	- If `state.parksLayer` / `state.trailsLayer` are missing, infer them again from `state.view.map.allLayers` in `trailManager` before returning empty data.
 	- `trailManager.initTrails()` currently awaits `assignParksToTrails()` before re-publishing `state.trails`; do not regress to a background-only park-assignment path that allows the UI and SceneView filters to race ahead of trail association.
+	- ArcGIS 5 removed the old `geometryEngineAsync` module path used in earlier revisions of this repo.
+		- Keep the spatial park/trail fallback on geometry operators such as `intersectsOperator.execute()` rather than restoring the removed import.
 - Authentication safety:
 	- Never hardcode expired ArcGIS tokens or force an API key.
 	- Only set `esriConfig.apiKey` when a valid key is explicitly provided.
@@ -59,6 +69,21 @@
 - UI construction must not wait on `SceneElement.ready`; retry trail initialization briefly when the map is slow.
 - Layer inference and blank-label fallback must remain resilient because layer fields vary across web maps.
 - The current NPS boundary layer exposes `UNIT_TYPE`; when available, use it to keep the park list scoped to National Parks only.
+- ArcGIS component bootstrap is order-sensitive in the current package setup:
+	- Configure local asset paths for `@esri/calcite-components`, `@arcgis/common-components`, and `@arcgis/map-components` before importing or registering `arcgis-*` web components.
+	- Keep the current Vite asset pipeline intact: serve component assets directly from installed packages during development, and copy them into `dist` during production builds and CI so `map-components` and `common-components` assets remain available without committing generated runtime trees.
+	- Keep `index.html` head assets GitHub Pages-safe:
+		- Metadata and icon paths used by the app shell must resolve from Vite-emitted assets or the `public/` directory in the built site.
+		- Do not point app-shell icons or `msapplication-TileImage` at `src/...` paths that will not exist in `dist`.
+	- Do not revert `main.ts` back to eager side-effect imports of `@arcgis/map-components/components/*` before asset-path setup.
+	- Keep the current component-host architecture:
+		- `SceneElement` mounts a real `arcgis-scene` or `arcgis-map` component around the shared `WebMap`.
+		- Read the active host component's `view` back into shared state so existing selection, highlighting, and layer logic can continue using the raw View API.
+		- Bind the `arcgis-*` controls to the active view through each element's `view` property.
+		- Do not regress back to raw standalone `MapView` / `SceneView` construction or deprecated `@arcgis/core/widgets/*` controls for this UI.
+- Vite dev/runtime stability now depends on explicit dedupe:
+	- Keep `vite.config.js` `resolve.dedupe` covering ArcGIS packages plus `lit`, `lit-html`, `lit-element`, and `@lit/reactive-element`.
+	- Treat reappearance of `Multiple versions of Lit loaded`, `Cannot read from private field`, or `Portal/Basemap is not a subclass of itself` as duplicate-runtime/bootstrap regressions first.
 - Selection state must stay string-safe, synchronize between comboboxes and map clicks, and preserve context across 3D/2D switches.
 - Repeated trail names are currently treated as source-data truth, not as UI duplication.
 	- The combobox rebuilds from scratch on park changes.
@@ -69,6 +94,12 @@
 	- Keep the overlapping-park suppression path, trail-length fallback behavior, and 3D selected-trail wall highlight/detail layout work.
 	- Keep the current 3D selection/UI fixes and do not regress back to source-layer-only park-selected trail rendering in SceneView.
 	- Treat reports where 2D works but 3D fails as SceneView rendering or camera issues first, not as trail-association failures by default.
+	- Keep the basemap gallery on an explicit view-mode-aware `source`.
+		- In `SceneView`, include scene-appropriate basemaps such as `topo-3d`, `navigation-3d`, and imagery options instead of relying on the default gallery source.
+		- In `MapView`, keep the gallery limited to 2D-safe basemaps such as `topo-vector`, `streets-navigation-vector`, and imagery options.
+	- Keep the basemap expand trigger visually consistent with the rest of the top-right controls.
+		- The collapsed `arcgis-expand` trigger for the basemap gallery should remain `32px x 32px`.
+		- Size the expanded gallery panel separately with panel-width styling such as `--arcgis-internal-panel-width`; do not stretch `#basemapExpandControl` itself to the gallery width.
 
 ## Current implementation context
 - Selected-only map presentation currently depends on source-layer filtering plus a separate `highlightLayer` in `SceneElement`:
@@ -99,18 +130,25 @@
 		- Then keep wall height bounded through `config.selection` rather than compensating with exaggerated geometry.
 - Trail detail layout currently groups selected-trail information into separate fact and attribute sections:
 	- Keep compact fact badges for values such as length, ascent or gain, difficulty, duration, and status when available.
+	- Keep the primary fact badges text-only; do not reintroduce decorative icons inside `detailFacts`.
 	- Keep stacked attribute rows for values such as surface, use, type, and class below the primary facts.
 	- The secondary attribute section should stay visually lightweight; do not reintroduce a tinted background block behind it.
-- Elevation profile creation currently depends on guarded widget creation in `DetailPanel`:
-	- Build the `ElevationProfile` input from a valid `Graphic`, not from the raw trail model.
-	- Validate that selected trail geometry is a polyline with at least one path and at least two vertices before creating the widget.
+- Elevation profile creation currently depends on guarded component setup in `DetailPanel`:
+	- Build the profile input from a valid `Graphic`, not from the raw trail model.
+	- Validate that selected trail geometry is a polyline with at least one path and at least two vertices before creating the profile.
+	- Keep profile visualization enabled; setting `hideVisualization = true` removes the chart-hover scrub marker or orb from the trail path.
 	- If profile creation fails or the view is still switching/loading, show a concise in-panel fallback instead of leaving the panel blank.
 - Layer inference must continue preferring park/trail layers that expose join and designation fields used by the current NPS web map:
 	- Prefer park layers with `UNIT_CODE` and `UNIT_TYPE` when scoring polygon candidates.
 	- Prefer trail layers with `UNITCODE` when scoring polyline candidates.
+- SceneView labeling has a current limitation that must stay reflected in the implementation:
+	- Do not remap non-point `labelPlacement` values in SceneView to other guessed placements.
+	- For non-point layers, remove unsupported `labelPlacement` overrides instead of forcing values such as `above-center` or `center-center`.
+	- Treat runtime warnings like `the requested label placement 'above-center' is currently unsupported for 'polygon' geometries in SceneView` as label-sanitization regressions to fix, not as expected noise.
 - Current build-health expectation:
 	- `npm run type-check` should pass.
 	- `npm run build` should pass.
+	- Vite chunk-size warnings from ArcGIS-heavy bundles are currently acceptable as optimization follow-up work; do not treat them as build failures unless the task is specifically bundle reduction.
 
 ## Selection-to-map sync
 - Park/trail selection from combobox or map click must update map visibility consistently:
@@ -129,9 +167,17 @@
 ## Engineering guidelines
 - Keep changes focused and minimal.
 - Preserve existing TypeScript style and ArcGIS Accessor state pattern.
+- Keep the compiler/runtime compatibility floor aligned with the current ArcGIS stack:
+	- ArcGIS 5.x in this repo currently type-checks cleanly with TypeScript 5.9.x.
+	- Do not downgrade TypeScript without revalidating ArcGIS declaration compatibility.
 - Keep setup and validation instructions aligned with the current README flow:
 	- Start the app with `npm run start`.
 	- Validate with `npm run type-check` and `npm run build` before handoff.
+- Runtime validation expectations after ArcGIS bootstrap work:
+	- A clean local startup should not show `Multiple versions of Lit loaded`, `Cannot read from private field`, ArcGIS `Accessor#set` type-mismatch warnings for `Portal`/`Basemap`, or `js.arcgis.com/.../map-components/...` asset 404s.
+	- A clean local startup should not show deprecated-control regressions such as the app falling back to legacy `@arcgis/core/widgets/*` top-right controls.
+	- A clean local startup should not show the unsupported SceneView polygon label-placement warning described above.
+	- Treat browser WebGL warnings, devtools source-map noise, and intermittent remote ArcGIS service CORS/tile failures as secondary unless they remain reproducible after the runtime bootstrap is clean.
 
 ## Manual QA checklist
 
@@ -149,6 +195,7 @@ Run these checks after any change to data loading, combobox logic, or selection 
 	- Trail names are visible in the list and selected state.
 8. Select a trail and confirm:
 	- Trail details and elevation profile render in the panel.
+	- Hovering the elevation profile chart shows the trail scrub marker or orb again.
 	- When rich trail attributes are unavailable, the panel shows a concise fallback message instead of `null` text.
 	- Map shows selected-only behavior:
 		- Park layer filtered to selected park object ID.
@@ -159,6 +206,10 @@ Run these checks after any change to data loading, combobox logic, or selection 
 10. In 3D, explicitly test problem parks such as Acadia, Badlands, Biscayne, and Denali and confirm park-selected trails are visible before selecting an individual trail.
 11. In 3D, select problematic Denali trails such as Eielson Visitor Center Campus Trails and Mountain Vista Area Trails and confirm the selected-trail highlight no longer shows isolated spike or unrealistic height artifacts at individual vertices.
 12. Switch between 3D and 2D and confirm selected park/trail context is preserved when possible.
-13. Validate build health:
+13. Open the basemap gallery in both 3D and 2D and confirm:
+	- The collapsed basemap trigger matches the other top-right map controls at `32px x 32px`.
+	- The expanded gallery panel is wide enough to avoid the previously squashed layout.
+	- In 3D, the gallery includes scene-oriented basemap choices instead of only 2D-style defaults.
+14. Validate build health:
 	- `npm run type-check`
 	- `npm run build`

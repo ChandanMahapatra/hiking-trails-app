@@ -19,7 +19,7 @@ import SelectionPanel from "./SelectionPanel";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 import { State } from "../types";
 
-import "../../style/menu-panel.scss";
+type RemovableHandle = { remove: () => void };
 
 export default class MenuPanel {
   state: State;
@@ -29,6 +29,10 @@ export default class MenuPanel {
   loadingMessage: HTMLElement;
   parkField: HTMLElement;
   trailField: HTMLElement;
+  private selectionPanel: SelectionPanel;
+  private detailPanel: DetailPanel;
+  private watchHandles: RemovableHandle[];
+  private destroyed: boolean;
 
   constructor(state: State) {
     this.state = state;
@@ -38,9 +42,11 @@ export default class MenuPanel {
     this.loadingMessage = document.getElementById("selectionLoadingMessage");
     this.parkField = document.getElementById("parkSelectLabel");
     this.trailField = document.getElementById("trailSelectLabel");
+    this.watchHandles = [];
+    this.destroyed = false;
 
-    new SelectionPanel(state);
-    new DetailPanel(state);
+    this.selectionPanel = new SelectionPanel(state);
+    this.detailPanel = new DetailPanel(state);
 
     const syncLoadingState = () => {
       if (!this.loadingContainer || !this.loadingIndicator || !this.loadingMessage) {
@@ -55,9 +61,14 @@ export default class MenuPanel {
 
       this.loadingContainer.hidden = !(showLoader || showEmptyState);
       this.loadingContainer.classList.toggle("is-empty", showEmptyState);
+      this.loadingContainer.classList.toggle("is-overlay", showLoader);
       this.loadingIndicator.toggleAttribute("hidden", !showLoader);
-      this.parkField?.toggleAttribute("hidden", showLoader || showEmptyState);
-      this.trailField?.toggleAttribute("hidden", showLoader || showEmptyState);
+      this.parkField?.toggleAttribute("hidden", showEmptyState);
+      this.trailField?.toggleAttribute("hidden", showEmptyState);
+      this.parkField?.classList.toggle("is-loading-reserved", showLoader);
+      this.trailField?.classList.toggle("is-loading-reserved", showLoader);
+      this.parkField?.setAttribute("aria-hidden", String(showLoader || showEmptyState));
+      this.trailField?.setAttribute("aria-hidden", String(showLoader || showEmptyState));
       this.loadingMessage.textContent = showLoader
         ? "Loading park and trail names..."
         : "Park and trail data is not available yet. Try reloading once the web map finishes loading.";
@@ -65,13 +76,23 @@ export default class MenuPanel {
 
     syncLoadingState();
 
-    reactiveUtils.watch(
+    this.watchHandles.push(reactiveUtils.watch(
       () => ({
         loading: state.displayLoading,
         parkCount: state.parks?.length || 0,
         trailCount: state.trails?.length || 0,
       }),
       syncLoadingState
-    );
+    ));
+  }
+
+  destroy() {
+    this.destroyed = true;
+    this.watchHandles.forEach((handle) => {
+      handle.remove();
+    });
+    this.watchHandles = [];
+    this.selectionPanel?.destroy();
+    this.detailPanel?.destroy();
   }
 }

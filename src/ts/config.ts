@@ -16,12 +16,33 @@ Data:
 
 Colors:
  - change the colors for visualizing the trails
- - for CSS colors check also the variables.scss file - selectedTrail is $orange
+ - keep UI styling aligned with the document-level CSS files in src/style/
 */
 
 export default {
   scene: {
     webmapItemId: "5a94b21ff6e94d10ae61483c392bbf9b"
+  },
+  view: {
+    startupViewpoint: {
+      targetGeometry: {
+        type: "point",
+        longitude: -98.5795,
+        latitude: 39.8283,
+        spatialReference: { wkid: 4326 }
+      },
+      scale: 20000000
+    },
+    basemaps: {
+      "3d": {
+        defaultId: "topo-3d",
+        sourceIds: ["topo-3d", "navigation-3d", "hybrid", "satellite"]
+      },
+      "2d": {
+        defaultId: "topo-vector",
+        sourceIds: ["topo-vector", "streets-navigation-vector", "hybrid", "satellite"]
+      }
+    }
   },
   selection: {
     parkOutlineWidth: 4,

@@ -1,0 +1,345 @@
+@import "@arcgis/core/assets/esri/themes/light/main.css";
+
+html,
+body {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  font-size: 16px;
+  font-family: var(
+    --calcite-font-family,
+    "Avenir Next",
+    Avenir,
+    "Helvetica Neue",
+    sans-serif
+  );
+  color: var(--calcite-ui-text-1, rgb(50, 50, 50));
+  overflow: hidden;
+  background-color: var(--calcite-ui-background, #f5f5f5);
+}
+
+body {
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: var(--calcite-font-size-1, 1.3rem);
+  font-weight: bold;
+  padding: 0;
+  text-align: center;
+  margin: 0;
+}
+
+.appHeader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  height: 56px;
+  background: var(--calcite-ui-foreground-1, rgba(255, 255, 255, 0.9));
+  border-bottom: 1px solid var(--calcite-ui-border-2, rgba(100, 100, 100, 0.75));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.appHeaderBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.appHeaderBrand calcite-icon {
+  flex: none;
+  color: var(--calcite-ui-brand, #5d7f57);
+}
+
+.appHeader h1 {
+  font-size: var(--calcite-font-size-0, 1.2rem);
+  text-align: left;
+}
+
+.appHeader .headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+}
+
+.appHeader .viewModeControl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--calcite-font-size--1, 0.9rem);
+  margin: 0;
+  height: 100%;
+  --calcite-label-margin-bottom: 0px;
+}
+
+.title {
+  position: relative;
+  z-index: 1;
+}
+
+.title::before {
+  border-top: 10px solid var(--calcite-ui-brand, #b5e2c1);
+  content: "";
+  margin: 0 auto;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 80%;
+  z-index: -1;
+}
+
+.title span {
+  background: var(--calcite-ui-foreground-1, #fff);
+  padding: 0 30px;
+}
+
+*:focus {
+  outline: none;
+}
+
+.share {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.share .fa-github-square {
+  vertical-align: top;
+  font-size: 1.5em;
+  color: black;
+  text-decoration: none;
+}
+
+.share .fa-github-square:hover {
+  color: var(--calcite-ui-text-1, rgb(50, 50, 50));
+}
+
+.share .twitter-share-button {
+  margin-top: 3px;
+}
+
+#credentialsPanel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  max-width: 600px;
+  margin: 50px auto 0;
+  background-color: var(--calcite-ui-foreground-1, rgba(255, 255, 255, 0.9));
+  padding: 20px;
+  z-index: 1000;
+  line-height: var(--calcite-line-height-1, 1.4);
+  box-shadow: var(--calcite-shadow-2, 0 1px 2px rgba(0, 0, 0, 0.3));
+  display: none;
+}
+
+#credentialsPanel .esri-icon-close {
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  cursor: pointer;
+}
+
+#credentialsPanel li {
+  padding: 10px;
+}
+
+#credentialsPanel a,
+#credentialsPanel #logo a,
+#credentialsPanel #impressumLink a {
+  font-weight: bold;
+  color: inherit;
+  text-decoration: none;
+}
+
+#flickrImage {
+  position: absolute;
+  -webkit-transition:
+    max-width 0.5s,
+    left 0.5s,
+    top 0.5s,
+    transform 0.5s;
+  -moz-transition:
+    max-width 0.5s,
+    left 0.5s,
+    top 0.5s,
+    transform 0.5s;
+  -ms-transition:
+    max-width 0.5s,
+    left 0.5s,
+    top 0.5s,
+    transform 0.5s;
+  -o-transition:
+    max-width 0.5s,
+    left 0.5s,
+    top 0.5s,
+    transform 0.5s;
+  transition:
+    max-width 0.5s,
+    left 0.5s,
+    top 0.5s,
+    transform 0.5s;
+  max-width: 50px;
+  box-shadow: 0 0 2px 1px var(--calcite-ui-border-2, rgba(100, 100, 100, 0.75));
+  z-index: 100;
+}
+
+#flickrContainer {
+  position: absolute;
+  z-index: 99;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  background-color: var(
+    --calcite-ui-transparent-scrim,
+    rgba(100, 100, 100, 0.4)
+  );
+}
+
+.connectionMessage {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  margin-left: -170px;
+  width: 300px;
+  z-index: 100;
+  padding: 20px;
+  text-align: center;
+  font-size: var(--calcite-font-size-0, 1rem);
+  box-shadow: var(--calcite-shadow-2, 0 1px 2px rgba(0, 0, 0, 0.3));
+  font-weight: bold;
+}
+
+.online {
+  background-color: var(--calcite-ui-success, rgba(184, 242, 204, 0.9));
+}
+
+.offline {
+  background-color: var(--calcite-ui-danger, rgba(241, 189, 183, 0.9));
+}
+
+b {
+  font-weight: 700;
+}
+
+.mapControls {
+  position: absolute;
+  top: 68px;
+  right: 12px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.mapControls[hidden] {
+  display: none;
+}
+
+.mapControls > * {
+  pointer-events: auto;
+}
+
+#mapControls arcgis-home,
+#mapControls arcgis-zoom,
+#mapControls arcgis-compass,
+#mapControls arcgis-navigation-toggle,
+#mapControls arcgis-expand {
+  display: block;
+}
+
+#basemapExpandControl {
+  inline-size: 32px;
+  block-size: 32px;
+  max-inline-size: 32px;
+  --arcgis-internal-panel-width: min(24rem, calc(100vw - 24px));
+}
+
+#legendExpandControl {
+  inline-size: 32px;
+  block-size: 32px;
+  max-inline-size: 32px;
+  --arcgis-internal-panel-width: min(20rem, calc(100vw - 24px));
+}
+
+#basemapGalleryControl {
+  display: block;
+  inline-size: var(
+    --arcgis-internal-panel-width,
+    min(24rem, calc(100vw - 24px))
+  );
+  min-inline-size: min(20rem, calc(100vw - 40px));
+  max-inline-size: var(
+    --arcgis-internal-panel-width,
+    min(24rem, calc(100vw - 24px))
+  );
+  max-block-size: min(70vh, 32rem);
+}
+
+#legendControl {
+  display: block;
+  inline-size: var(
+    --arcgis-internal-panel-width,
+    min(20rem, calc(100vw - 24px))
+  );
+  min-inline-size: min(18rem, calc(100vw - 40px));
+  max-inline-size: var(
+    --arcgis-internal-panel-width,
+    min(20rem, calc(100vw - 24px))
+  );
+  max-block-size: min(70vh, 24rem);
+}
+
+#detailElevationProfile arcgis-elevation-profile {
+  display: block;
+  inline-size: 100%;
+  overflow: hidden;
+  padding: 8px;
+  background: var(--calcite-ui-foreground-1, rgba(255, 255, 255, 0.96));
+}
+
+@media (max-width: 600px) {
+  .appHeader h1 {
+    font-size: var(--calcite-font-size--1, 1rem);
+  }
+
+  .mapControls {
+    top: 64px;
+    right: 10px;
+  }
+
+  #basemapExpandControl {
+    --arcgis-internal-panel-width: calc(100vw - 20px);
+  }
+
+  #legendExpandControl {
+    --arcgis-internal-panel-width: calc(100vw - 20px);
+  }
+
+  #basemapGalleryControl {
+    inline-size: calc(100vw - 20px);
+    min-inline-size: auto;
+    max-inline-size: calc(100vw - 20px);
+  }
+
+  #legendControl {
+    inline-size: calc(100vw - 20px);
+    min-inline-size: auto;
+    max-inline-size: calc(100vw - 20px);
+  }
+}

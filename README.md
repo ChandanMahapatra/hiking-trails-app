@@ -1,18 +1,16 @@
-# Hiking Trails Explorer
+# US Hiking Trails Explorer
 
 This application explores hiking trails across U.S. National Parks using the ArcGIS Maps SDK for JavaScript and a configured ArcGIS WebMap. The experience opens in 3D, offers an optional 2D switch, and keeps the sidebar focused on park and trail selection, trail details, and the live elevation profile for the active route.
 
-This app is based on [Esri's hiking-trails-app](https://github.com/Esri/hiking-trails-app) by [Raluca Nicola](https://github.com/RalucaNicola).
+This project builds on [Esri's hiking-trails-app](https://github.com/Esri/hiking-trails-app) by [Raluca Nicola](https://github.com/RalucaNicola), but the current product framing, data assumptions, and deployment flow are now specific to a U.S. National Parks experience.
 
-[View it live](https://esri.github.io/hiking-trails-app)
-
-![hiking-trails-app](screenshots/screenshot1.PNG)
+![US Hiking Trails Explorer](screenshots/screenshot1.PNG)
 
 ## Features
 
 * Browse U.S. National Parks and their hiking trails from two searchable Calcite comboboxes. Trail options stay scoped to the selected park, and the detail panel shows available trail facts plus a live elevation profile.
 
-* Start in a 3D `SceneView` and switch to a 2D `MapView` while preserving the current park and trail context when practical. Basemap switching uses the official ArcGIS JavaScript API `BasemapGallery` widget.
+* Start in a 3D `SceneView` and switch to a 2D `MapView` while preserving the current park and trail context when practical. Basemap switching stays on official ArcGIS map components through `arcgis-expand` and `arcgis-basemap-gallery`, with curated 3D and 2D basemap sources per view mode.
 
 * Infer park and trail layers from the loaded web map at runtime instead of hard-coding service URLs or field names. The app prefers join fields such as `UNIT_CODE`, `UNITCODE`, `UNIT_ID`, and `PARK_ID`, and falls back to spatial association when those joins are missing.
 
@@ -29,6 +27,8 @@ This app is based on [Esri's hiking-trails-app](https://github.com/Esri/hiking-t
 * Trail and park initialization now retries briefly while the web map and inferred layers finish loading. The sidebar loader and empty-state messaging stay in sync with that initialization path.
 
 * Active park and trail selections are reapplied after 3D/2D view switches, and the elevation profile is rebuilt against the current view so the panel remains consistent across mode changes.
+
+* Vite now serves Calcite and ArcGIS component runtime assets directly from installed packages during development and copies them into `dist` during production builds and CI, so the app remains deployable as a static GitHub Pages site without committing generated runtime trees.
 
 * The trail detail area below the comboboxes now separates compact fact badges from stacked attribute rows such as surface, use, type, and class to improve readability.
 
@@ -66,7 +66,9 @@ Because the app intentionally infers layers from the configured web map, you can
 
 * In SceneView, the selected trail highlight uses a volumetric `line-3d` path symbol with a quad profile to create a wall-like 3D trail emphasis. In MapView, the selected trail falls back to a simpler flat line highlight.
 
-* Trail detail fallbacks prefer concise values from inferred attributes such as surface, use, type, and seasonal description, while the ArcGIS `ElevationProfile` widget remains the source of elevation information. When trail-length fields are missing or ambiguous, the selected trail can fall back to a geodetic distance measurement for the fact badges.
+* Trail detail fallbacks prefer concise values from inferred attributes such as surface, use, type, and seasonal description, while the `arcgis-elevation-profile` component backed by ArcGIS ElevationProfile behavior remains the source of elevation information. When trail-length fields are missing or ambiguous, the selected trail can fall back to a geodetic distance measurement for the fact badges.
+
+* Basemap controls remain component-driven. The collapsed basemap trigger stays aligned with the other top-right map controls, and the expanded gallery uses view-mode-specific sources rather than a single default gallery list.
 
 * Layer inference is biased toward the current NPS boundary layer because it exposes `UNIT_CODE` and `UNIT_TYPE`, which are needed for National Park filtering and park-to-trail association.
 
@@ -78,6 +80,26 @@ Because the app intentionally infers layers from the configured web map, you can
 4. Start the development app with `npm run start`.
 5. Validate types with `npm run type-check`.
 6. Create a production build with `npm run build`.
+7. Preview the production build locally with `npm run preview`.
+
+## GitHub Pages deployment
+
+The app is deployed as a static site. During local development, Vite serves Calcite, ArcGIS map-components, and ArcGIS common-components runtime assets directly from the installed packages. During production builds and CI, Vite copies those runtime assets into the generated `dist` output so they can be published as static files.
+
+Static head assets referenced from `index.html` must also resolve in the built site. App icons and Microsoft tile metadata should point to Vite-emitted assets or files in `public/`, not to `src/...` paths that disappear from the published `dist` output.
+
+The recommended deployment path is GitHub Pages through GitHub Actions:
+
+1. `npm ci`
+2. `npm run type-check`
+3. `npm run build`
+4. Publish the generated `dist` output
+
+The included Pages workflow uses that flow so generated component assets do not need to be maintained manually in source control.
+
+## Credentials
+
+ArcGIS credentials are not committed in this repository. [src/ts/main.ts](./src/ts/main.ts) only sets `esriConfig.apiKey` when a value is explicitly provided through configuration. Any future key should be injected through an environment-backed path or local configuration process rather than checked into source control.
 
 ## Requirements
 
@@ -88,11 +110,11 @@ Because the app intentionally infers layers from the configured web map, you can
 
 The following libraries, APIs, and data sources are used by this application:
 
-* [ArcGIS Maps SDK for JavaScript 4.34](https://developers.arcgis.com/javascript/) for the map, views, widgets, feature querying, and elevation profile.
+* [ArcGIS Maps SDK for JavaScript](https://developers.arcgis.com/javascript/) package runtime via `@arcgis/core` 5.0.15, `@arcgis/map-components` 5.0.15, and `@arcgis/common-components` 5.0.15.
 * [Calcite Components](https://developers.arcgis.com/calcite-design-system/) for the searchable park and trail comboboxes and header controls.
 * ArcGIS WebMap item `5a94b21ff6e94d10ae61483c392bbf9b` as the default map source.
 * Park and trail feature layers supplied by that web map and inferred at runtime from layer geometry, titles, URLs, display fields, and field names.
-* ArcGIS `ElevationProfile` widget for the selected trail's live elevation profile.
+* ArcGIS `arcgis-elevation-profile` component for the selected trail's live elevation profile.
 
 ## Validation status
 
@@ -100,6 +122,8 @@ The current implementation has been validated with:
 
 * `npm run type-check`
 * `npm run build`
+
+The current production build may still emit Vite chunk-size warnings because ArcGIS packages contribute several large bundles. Those warnings are a performance follow-up area, not a failed build.
 
 ## Disclaimer
 

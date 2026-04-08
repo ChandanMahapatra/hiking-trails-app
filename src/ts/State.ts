@@ -81,7 +81,7 @@ export default class State extends Accessor {
   viewMode: ViewMode = "3d";
 
   @property()
-  view: ArcGISView = null;
+  view: ArcGISView | null = null;
 
   @property()
   trails: Array<Trail> = null;

@@ -21,7 +21,7 @@ export interface State extends Accessor {
   selectedPark: Park;
   device: Device;
   viewMode: ViewMode;
-  view: ArcGISView;
+  view: ArcGISView | null;
   trails: Array<Trail>;
   parks: Array<Park>;
   trailsLayer: FeatureLayer | null;

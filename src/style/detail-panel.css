@@ -1,0 +1,114 @@
+#detailPanel {
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 220px;
+}
+
+#detailPanel h3 {
+  padding-top: 0;
+  text-align: left;
+  padding: 0;
+  line-height: 1.2;
+}
+
+#detailPanel #detailElevationProfile {
+  padding: 10px 0 0;
+  width: 100%;
+  min-height: 220px;
+}
+
+#detailPanel #detailDescription {
+  margin: 0;
+  min-height: 42px;
+  line-height: var(--calcite-line-height-1, 1.4);
+  color: var(--calcite-ui-text-2, rgb(50, 50, 50));
+}
+
+#detailPanel #detailInfograph {
+  padding-top: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 44px;
+}
+
+#detailPanel #detailInfograph .detailEmptyState {
+  margin: 0;
+  line-height: var(--calcite-line-height-1, 1.4);
+  color: var(--calcite-ui-text-2, rgb(50, 50, 50));
+}
+
+#detailPanel #detailInfograph .detailFacts {
+  display: flex;
+  gap: 10px;
+}
+
+#detailPanel #detailInfograph .detailFacts--primary {
+  flex-wrap: wrap;
+}
+
+#detailPanel #detailInfograph .detailFacts--secondary {
+  flex-direction: column;
+  padding: 8px 0px;
+}
+
+#detailPanel #detailInfograph .detailAttribute {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#detailPanel #detailInfograph .detailAttributeLabel {
+  font-size: var(--calcite-font-size--2, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--calcite-ui-text-3, rgb(110, 110, 110));
+}
+
+#detailPanel #detailInfograph .detailAttributeValue {
+  font-size: var(--calcite-font-size-0, 1rem);
+  color: var(--calcite-ui-text-1, rgb(50, 50, 50));
+}
+
+#detailPanel #detailInfograph .infograph {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: var(--calcite-ui-foreground-2, rgba(255, 255, 255, 0.7));
+  border: 1px solid var(--calcite-ui-border-3, rgba(100, 100, 100, 0.15));
+}
+
+@media (max-width: 600px) {
+  #detailPanel {
+    gap: 12px;
+  }
+
+  #detailPanel h3 {
+    text-align: left;
+    padding: 0;
+  }
+
+  #detailPanel #detailInfograph {
+    text-align: left;
+    padding-left: 0;
+  }
+
+  #detailPanel #detailInfograph .detailFacts--secondary {
+    padding: 12px;
+  }
+
+  #detailPanel #detailDescription {
+    display: none;
+  }
+
+  #detailPanel #detailElevationProfile {
+    margin: 0;
+    width: 100%;
+    min-height: 180px;
+  }
+}

@@ -17,31 +17,50 @@
 import { State } from "../types";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 
+type RemovableHandle = { remove: () => void };
+
 export default class ConnectionManager {
   private messageContainer: HTMLElement;
+  private watchHandles: RemovableHandle[];
+  private onlineStatusListener: () => void;
+  private hideMessageTimeoutId: number | null;
 
   constructor(state: State) {
-    window.addEventListener("load", function () {
-      function updateOnlineStatus() {
-        state.online = navigator.onLine ? true : false;
-      }
+    this.watchHandles = [];
+    this.hideMessageTimeoutId = null;
+    this.onlineStatusListener = () => {
+      state.online = navigator.onLine;
+    };
 
-      window.addEventListener("online", updateOnlineStatus);
-      window.addEventListener("offline", updateOnlineStatus);
-    });
+    window.addEventListener("online", this.onlineStatusListener);
+    window.addEventListener("offline", this.onlineStatusListener);
+    this.onlineStatusListener();
 
     this.messageContainer = document.body.appendChild(
       document.createElement("div")
     );
 
-    reactiveUtils.watch(() => state.online, (value) => {
-      console.log(value);
+    this.watchHandles.push(reactiveUtils.watch(() => state.online, (value) => {
       if (!value) {
         this.createOfflineMessage();
       } else {
         this.createOnlineMessage();
       }
+    }));
+  }
+
+  destroy() {
+    this.watchHandles.forEach((handle) => {
+      handle.remove();
     });
+    this.watchHandles = [];
+    window.removeEventListener("online", this.onlineStatusListener);
+    window.removeEventListener("offline", this.onlineStatusListener);
+    if (this.hideMessageTimeoutId !== null) {
+      window.clearTimeout(this.hideMessageTimeoutId);
+      this.hideMessageTimeoutId = null;
+    }
+    this.messageContainer.remove();
   }
 
   createOfflineMessage() {
@@ -56,8 +75,13 @@ export default class ConnectionManager {
   }
 
   private setMessage(message: string, online: boolean): void {
+    if (this.hideMessageTimeoutId !== null) {
+      window.clearTimeout(this.hideMessageTimeoutId);
+      this.hideMessageTimeoutId = null;
+    }
+
     // display message
-    this.messageContainer.innerHTML = message;
+    this.messageContainer.textContent = message;
     this.messageContainer.classList.add("connectionMessage");
 
     if (online) {
@@ -65,9 +89,10 @@ export default class ConnectionManager {
       this.messageContainer.classList.remove("offline");
 
       // message disappears after 3 seconds
-      window.setTimeout(() => {
-        this.messageContainer.innerHTML = "";
+      this.hideMessageTimeoutId = window.setTimeout(() => {
+        this.messageContainer.textContent = "";
         this.messageContainer.classList.remove("online", "connectionMessage");
+        this.hideMessageTimeoutId = null;
       }, 3000);
     } else {
       this.messageContainer.classList.remove("online");

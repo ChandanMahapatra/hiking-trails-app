@@ -14,9 +14,16 @@
  *
  */
 
-import "../../style/selection-panel.scss";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 import { EntityId, State, Trail } from "../types";
+
+type RemovableHandle = { remove: () => void };
+
+type DomListenerRegistration = {
+  target: EventTarget;
+  type: string;
+  listener: EventListener;
+};
 
 export default class SelectionPanel {
   parkSelect: HTMLElement;
@@ -24,77 +31,115 @@ export default class SelectionPanel {
   modeSwitch: any;
   state: State;
   private suppressComboboxEvents: boolean;
+  private watchHandles: RemovableHandle[];
+  private domListeners: DomListenerRegistration[];
+  private destroyed: boolean;
+  private parkOptionsSignature: string;
+  private trailOptionsSignature: string;
 
   constructor(state: State) {
     this.state = state;
     this.suppressComboboxEvents = false;
+    this.watchHandles = [];
+    this.domListeners = [];
+    this.destroyed = false;
+    this.parkOptionsSignature = "";
+    this.trailOptionsSignature = "";
     this.parkSelect = document.getElementById("parkSelect");
     this.trailSelect = document.getElementById("trailSelect");
     this.modeSwitch = document.getElementById("viewModeToggle");
 
-    const initializeComboboxes = () => {
-      if (!this.parkSelect || !this.trailSelect) {
-        return;
-      }
-      this.withSuppressedComboboxEvents(() => {
-        this.populateParkOptions();
-        this.populateTrailOptions();
-      });
-    };
+    void this.initializeComboboxes();
 
-    queueMicrotask(initializeComboboxes);
-    window.setTimeout(initializeComboboxes, 0);
-    window.setTimeout(initializeComboboxes, 500);
-    this.whenCalciteReady().then(initializeComboboxes);
-
-    this.parkSelect.addEventListener("calciteComboboxChange", () => {
+    this.addDomListener(this.parkSelect, "calciteComboboxChange", () => {
       if (this.suppressComboboxEvents) return;
       this.state.setSelectedPark(this.readSelectedId(this.parkSelect));
     });
 
-    this.trailSelect.addEventListener("calciteComboboxChange", () => {
+    this.addDomListener(this.trailSelect, "calciteComboboxChange", () => {
       if (this.suppressComboboxEvents) return;
       this.state.setSelectedTrail(this.readSelectedId(this.trailSelect));
     });
 
-    this.modeSwitch?.addEventListener("calciteSwitchChange", () => {
+    this.addDomListener(this.modeSwitch, "calciteSwitchChange", () => {
       this.state.viewMode = this.modeSwitch.checked ? "2d" : "3d";
     });
 
-    reactiveUtils.watch(() => state.selectedParkId, () => {
+    this.addWatch(reactiveUtils.watch(() => state.selectedParkId, () => {
       this.withSuppressedComboboxEvents(() => {
         this.syncSelection(this.parkSelect, this.state.selectedParkId);
         this.populateTrailOptions();
       });
-    });
+    }));
 
-    reactiveUtils.watch(() => state.parks, () => {
+    this.addWatch(reactiveUtils.watch(() => state.parks, () => {
       this.withSuppressedComboboxEvents(() => {
         this.populateParkOptions();
         this.populateTrailOptions();
       });
-    });
+    }));
 
-    reactiveUtils.watch(() => state.trails, () => {
+    this.addWatch(reactiveUtils.watch(() => state.trails, () => {
       this.withSuppressedComboboxEvents(() => {
         this.populateTrailOptions();
       });
-    });
+    }));
 
-    reactiveUtils.watch(() => state.selectedTrailId, () => {
+    this.addWatch(reactiveUtils.watch(() => state.selectedTrailId, () => {
       this.withSuppressedComboboxEvents(() => {
         this.syncSelection(this.trailSelect, this.state.selectedTrailId);
       });
-    });
+    }));
 
-    reactiveUtils.watch(() => state.viewMode, (viewMode) => {
+    this.addWatch(reactiveUtils.watch(() => state.viewMode, (viewMode) => {
       if (this.modeSwitch) {
         this.modeSwitch.checked = viewMode === "2d";
       }
+    }));
+  }
+
+  private addWatch(handle: RemovableHandle) {
+    this.watchHandles.push(handle);
+  }
+
+  private addDomListener(target: EventTarget | null | undefined, type: string, listener: EventListener) {
+    if (!target) {
+      return;
+    }
+
+    target.addEventListener(type, listener);
+    this.domListeners.push({ target, type, listener });
+  }
+
+  private async initializeComboboxes(): Promise<void> {
+    await this.whenCalciteReady();
+    if (this.destroyed || !this.parkSelect || !this.trailSelect) {
+      return;
+    }
+
+    this.withSuppressedComboboxEvents(() => {
+      this.populateParkOptions();
+      this.populateTrailOptions();
     });
   }
 
+  destroy() {
+    this.destroyed = true;
+    this.watchHandles.forEach((handle) => {
+      handle.remove();
+    });
+    this.watchHandles = [];
+    this.domListeners.forEach(({ target, type, listener }) => {
+      target.removeEventListener(type, listener);
+    });
+    this.domListeners = [];
+  }
+
   private withSuppressedComboboxEvents(callback: () => void) {
+    if (this.destroyed) {
+      return;
+    }
+
     this.suppressComboboxEvents = true;
     try {
       callback();
@@ -111,25 +156,42 @@ export default class SelectionPanel {
   }
 
   private populateParkOptions() {
-    const parks = this.state.parks || [];
-    this.removeAllItems(this.parkSelect);
+    if (this.destroyed || !this.parkSelect) {
+      return;
+    }
 
-    parks.forEach((park) => {
-      this.parkSelect.appendChild(this.createComboboxItem(park.id, park.name));
-    });
+    const parks = this.state.parks || [];
+    const nextSignature = parks
+      .map((park) => `${String(park.id)}:${String(park.name).trim()}`)
+      .join("|");
+
+    if (nextSignature !== this.parkOptionsSignature) {
+      const items = parks.map((park) => {
+        return this.createComboboxItem(park.id, park.name);
+      });
+      this.replaceItems(this.parkSelect, items);
+      this.parkOptionsSignature = nextSignature;
+    }
 
     this.syncSelection(this.parkSelect, this.state.selectedParkId);
     this.setDisabled(this.parkSelect, parks.length === 0);
   }
 
   private populateTrailOptions() {
+    if (this.destroyed || !this.trailSelect) {
+      return;
+    }
+
     const trails = this.state.trails || [];
     const selectedParkId = this.state.selectedParkId;
 
     // Keep the trail combobox disabled until a park is selected so the
     // component isn't overwhelmed with thousands of items.
     if (selectedParkId === null || selectedParkId === undefined) {
-      this.removeAllItems(this.trailSelect);
+      if (this.trailOptionsSignature !== "") {
+        this.replaceItems(this.trailSelect, []);
+        this.trailOptionsSignature = "";
+      }
       this.setDisabled(this.trailSelect, true);
       return;
     }
@@ -146,12 +208,21 @@ export default class SelectionPanel {
       });
     const optionLabels = this.buildTrailOptionLabels(filtered);
 
-    this.removeAllItems(this.trailSelect);
+    const nextSignature = filtered
+      .map((trail) => {
+        const trailLabel = optionLabels.get(this.getTrailOptionKey(trail)) || this.getBaseTrailLabel(trail);
+        return `${String(trail.id)}:${this.getTrailOptionKey(trail)}:${trailLabel}`;
+      })
+      .join("|");
 
-    filtered.forEach((trail) => {
-      const trailLabel = optionLabels.get(this.getTrailOptionKey(trail)) || this.getBaseTrailLabel(trail);
-      this.trailSelect.appendChild(this.createComboboxItem(trail.id, trailLabel));
-    });
+    if (nextSignature !== this.trailOptionsSignature) {
+      const items = filtered.map((trail) => {
+        const trailLabel = optionLabels.get(this.getTrailOptionKey(trail)) || this.getBaseTrailLabel(trail);
+        return this.createComboboxItem(trail.id, trailLabel);
+      });
+      this.replaceItems(this.trailSelect, items);
+      this.trailOptionsSignature = nextSignature;
+    }
 
     this.setDisabled(this.trailSelect, filtered.length === 0);
 
@@ -263,6 +334,10 @@ export default class SelectionPanel {
 
   /** Set the `selected` JS property on the matching item; clear all others. */
   private syncSelection(combobox: HTMLElement, selectedId: EntityId | null) {
+    if (this.destroyed || !combobox) {
+      return;
+    }
+
     const target = selectedId === null ? null : String(selectedId);
     combobox.querySelectorAll("calcite-combobox-item").forEach((item: any) => {
       const itemValue = item.value ?? item.getAttribute("value");
@@ -270,10 +345,17 @@ export default class SelectionPanel {
     });
   }
 
-  /** Remove child items and reset the combobox's internal shadow-DOM state. */
-  private removeAllItems(combobox: HTMLElement) {
-    const items = Array.from(combobox.querySelectorAll("calcite-combobox-item"));
-    items.forEach((item) => combobox.removeChild(item));
+  private replaceItems(combobox: HTMLElement, items: HTMLElement[]) {
+    if (!combobox) {
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    items.forEach((item) => {
+      fragment.appendChild(item);
+    });
+    combobox.replaceChildren(fragment);
+
     // Clear Calcite's internal value so the previous chip/text is not retained.
     (combobox as any).value = "";
   }

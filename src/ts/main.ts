@@ -14,12 +14,10 @@
  *
  */
 
-import "../style/reset.scss";
-import "../style/style.scss";
-import "@esri/calcite-components/main.css";
 import { defineCustomElements } from "@esri/calcite-components/loader";
-
-defineCustomElements(window);
+import { setAssetPath as setCommonComponentsAssetPath } from "@arcgis/common-components";
+import { setAssetPath as setMapComponentsAssetPath } from "@arcgis/map-components";
+import { setAssetPath as setCalciteAssetPath } from "@esri/calcite-components/dist/components";
 
 import esriConfig from "@arcgis/core/config";
 import config from "./config";
@@ -34,44 +32,123 @@ import ConnectionManager from "./ui/ConnectionManager";
 import deviceUtils from "./ui/deviceUtils";
 import MenuPanel from "./ui/MenuPanel";
 
-const state = new State();
-deviceUtils.init(state);
-new ConnectionManager(state);
-const sceneElement = new SceneElement(state);
-
-let uiInitialized = false;
-
-const initializeUi = async () => {
-  state.displayLoading = true;
-
-  if (!uiInitialized) {
-    new MenuPanel(state);
-    uiInitialized = true;
-  }
-
-  try {
-    const maxAttempts = 20;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        await trailManager.initTrails(state);
-        if ((state.parks?.length || 0) > 0 && (state.trails?.length || 0) > 0) {
-          return;
-        }
-      } catch (error) {
-        console.warn(`Trail initialization attempt ${attempt} failed.`, error);
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-
-    console.warn("Trail initialization completed without loaded park/trail data.");
-  } finally {
-    state.displayLoading = false;
-  }
+const registerMapComponents = async () => {
+  await Promise.all([
+    import("@arcgis/map-components/components/arcgis-map"),
+    import("@arcgis/map-components/components/arcgis-scene"),
+    import("@arcgis/map-components/components/arcgis-basemap-gallery"),
+    import("@arcgis/map-components/components/arcgis-compass"),
+    import("@arcgis/map-components/components/arcgis-elevation-profile"),
+    import("@arcgis/map-components/components/arcgis-expand"),
+    import("@arcgis/map-components/components/arcgis-home"),
+    import("@arcgis/map-components/components/arcgis-legend"),
+    import("@arcgis/map-components/components/arcgis-navigation-toggle"),
+    import("@arcgis/map-components/components/arcgis-zoom"),
+  ]);
 };
 
-void initializeUi();
+const configureComponentAssets = () => {
+  setCalciteAssetPath(new URL("./calcite/", document.baseURI).toString());
+  setCommonComponentsAssetPath(
+    new URL("./arcgis/common-components/", document.baseURI).toString()
+  );
+  setMapComponentsAssetPath(
+    new URL("./arcgis/map-components/", document.baseURI).toString()
+  );
+};
 
-sceneElement.ready.catch((error) => {
-  console.warn("Scene initialization failed, continuing with degraded behavior.", error);
+let destroyApp = () => {};
+
+const sleep = (delayMs: number) => {
+  return new Promise((resolve) => window.setTimeout(resolve, delayMs));
+};
+
+const startApp = async () => {
+  configureComponentAssets();
+  defineCustomElements(window);
+  await registerMapComponents();
+
+  const state = new State();
+  deviceUtils.init(state);
+  const connectionManager = new ConnectionManager(state);
+  const sceneElement = new SceneElement(state);
+
+  let uiInitialized = false;
+  let isDisposed = false;
+  let menuPanel: MenuPanel | null = null;
+
+  const initializeUi = async () => {
+    if (isDisposed) {
+      return;
+    }
+
+    state.displayLoading = true;
+
+    if (!uiInitialized) {
+      menuPanel = new MenuPanel(state);
+      uiInitialized = true;
+    }
+
+    try {
+      const maxAttempts = 8;
+      let delayMs = 200;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          await trailManager.initTrails(state);
+          if (isDisposed) {
+            return;
+          }
+
+          if ((state.parks?.length || 0) > 0 && (state.trails?.length || 0) > 0) {
+            return;
+          }
+        } catch (error) {
+          console.warn(`Trail initialization attempt ${attempt} failed.`, error);
+        }
+
+        if (attempt === maxAttempts) {
+          break;
+        }
+
+        await sleep(delayMs);
+
+        if (isDisposed) {
+          return;
+        }
+
+        delayMs = Math.min(delayMs * 2, 1000);
+      }
+
+      console.warn("Trail initialization completed without loaded park/trail data.");
+    } finally {
+      state.displayLoading = false;
+    }
+  };
+
+  destroyApp = () => {
+    isDisposed = true;
+    menuPanel?.destroy();
+    menuPanel = null;
+    connectionManager.destroy();
+    sceneElement.destroy();
+    deviceUtils.destroy();
+  };
+
+  void initializeUi();
+
+  sceneElement.ready.catch((error) => {
+    console.warn("Scene initialization failed, continuing with degraded behavior.", error);
+  });
+};
+
+void startApp().catch((error) => {
+  console.error("Application bootstrap failed.", error);
 });
+
+const hot = (import.meta as any).hot;
+if (hot) {
+  hot.dispose(() => {
+    destroyApp();
+  });
+}

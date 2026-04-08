@@ -1,0 +1,82 @@
+#selectionPanel {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+}
+
+#selectionPanel .panelLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0;
+  color: var(--calcite-ui-text-1, rgb(50, 50, 50));
+  text-align: center;
+}
+
+#selectionPanel .panelLoading.is-overlay {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  z-index: 1;
+  min-height: 162px;
+  max-height: 162px;
+}
+
+#selectionPanel .panelLoading[hidden] {
+  display: none;
+}
+
+#selectionPanel .panelLoading p {
+  margin: 0;
+  max-width: 260px;
+  font-size: var(--calcite-font-size--1, 0.9rem);
+  line-height: var(--calcite-line-height-1, 1.4);
+  color: var(--calcite-ui-text-1, rgb(50, 50, 50));
+}
+
+#selectionPanel calcite-label {
+  display: block;
+  font-size: var(--calcite-font-size--1, 0.9rem);
+  font-weight: bold;
+  color: var(--calcite-ui-text-1, rgb(50, 50, 50));
+}
+
+#selectionPanel calcite-label[hidden] {
+  display: none;
+}
+
+#selectionPanel calcite-label.is-loading-reserved {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#selectionPanel calcite-combobox {
+  width: 100%;
+  margin-top: 6px;
+}
+
+#selectionPanel #detailPanel {
+  flex: 1 0 auto;
+  margin-top: 6px;
+  border-top: 1px solid var(--calcite-ui-border-2, rgba(100, 100, 100, 0.75));
+  padding-top: 14px;
+}
+
+@media (max-width: 600px) {
+  #selectionPanel .panelLoading.is-overlay {
+    left: 15px;
+    right: 15px;
+    min-height: 152px;
+    max-height: 152px;
+  }
+
+  #selectionPanel calcite-label {
+    min-height: 72px;
+  }
+}

@@ -15,6 +15,7 @@
  */
 
 import WebMap from "@arcgis/core/WebMap";
+import Basemap from "@arcgis/core/Basemap";
 import Graphic from "@arcgis/core/Graphic";
 import Polyline from "@arcgis/core/geometry/Polyline";
 import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
@@ -22,32 +23,55 @@ import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
 import MapView from "@arcgis/core/views/MapView";
 import SceneView from "@arcgis/core/views/SceneView";
 import SunLighting from "@arcgis/core/webscene/SunLighting";
-import Compass from "@arcgis/core/widgets/Compass";
-import Home from "@arcgis/core/widgets/Home";
-import NavigationToggle from "@arcgis/core/widgets/NavigationToggle";
-import Zoom from "@arcgis/core/widgets/Zoom";
-import BasemapGallery from "@arcgis/core/widgets/BasemapGallery";
-import Expand from "@arcgis/core/widgets/Expand";
 import Viewpoint from "@arcgis/core/Viewpoint";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 import config from "../config";
 import { getTrailParkField, inferLayersFromMap } from "../data/trailManager";
 import { ArcGISView, State, Trail } from "../types";
-import "../../style/scene-panel.scss";
 
-const US_HOME_VIEWPOINT = new Viewpoint({
-  targetGeometry: {
-    type: "point",
-    longitude: -98.5795,
-    latitude: 39.8283,
-    spatialReference: { wkid: 4326 },
-  } as any,
-  scale: 20000000,
-});
+const ACTIVE_VIEW_ELEMENT_ID = "activeArcgisView";
+
+type RemovableHandle = { remove: () => void };
+type ArcGISViewElement = HTMLElement & {
+  autoDestroyDisabled?: boolean;
+  constraints?: any;
+  destroy?: () => Promise<void>;
+  environment?: any;
+  map?: WebMap | null;
+  popupDisabled?: boolean;
+  view?: ArcGISView | null;
+  viewpoint?: __esri.Viewpoint | null;
+  viewOnReady?: () => Promise<void>;
+};
+type ViewBoundControl = HTMLElement & {
+  view?: ArcGISView | null;
+  hidden?: boolean;
+};
+type BasemapGalleryControl = ViewBoundControl & {
+  source?: Basemap[] | null;
+};
+type HomeControl = ViewBoundControl & {
+  viewpoint?: __esri.Viewpoint | null;
+};
+type ExpandControl = ViewBoundControl & {
+  expanded?: boolean;
+};
+type ControlRegistry = {
+  container: HTMLElement | null;
+  home: HomeControl | null;
+  zoom: ViewBoundControl | null;
+  compass: ViewBoundControl | null;
+  navigationToggle: ViewBoundControl | null;
+  basemapGallery: BasemapGalleryControl | null;
+  basemapExpand: ExpandControl | null;
+  legend: ViewBoundControl | null;
+  legendExpand: ExpandControl | null;
+  all: ViewBoundControl[];
+};
 
 export default class SceneElement {
   state: State;
-  view: ArcGISView;
+  view: ArcGISView | null;
   map: WebMap;
   trailsLayer: FeatureLayer | null;
   parksLayer: FeatureLayer | null;
@@ -61,9 +85,18 @@ export default class SceneElement {
   private otherPolygonLayers: FeatureLayer[];
   private originalDefinitionExpressions: Map<FeatureLayer, string | null>;
   private originalVisibility: Map<FeatureLayer, boolean>;
+  private controls: ControlRegistry;
+  private viewElement: ArcGISViewElement | null;
+  private viewHost: HTMLElement | null;
+  private watchHandles: RemovableHandle[];
+  private viewHandles: RemovableHandle[];
+  private destroyed: boolean;
 
   constructor(state: State) {
     this.state = state;
+    this.view = null;
+    this.trailsLayer = null;
+    this.parksLayer = null;
     this.isSwitchingView = false;
     this.originalTrailsRenderer = null;
     this.originalTrailsElevationInfo = null;
@@ -71,6 +104,12 @@ export default class SceneElement {
     this.otherPolygonLayers = [];
     this.originalDefinitionExpressions = new Map();
     this.originalVisibility = new Map();
+    this.controls = this.resolveControls();
+    this.viewElement = null;
+    this.viewHost = document.getElementById("scenePanel");
+    this.watchHandles = [];
+    this.viewHandles = [];
+    this.destroyed = false;
     this.map = new WebMap({
       portalItem: {
         id: config.scene.webmapItemId,
@@ -88,34 +127,97 @@ export default class SceneElement {
 
     this.ready = this.init();
 
-    reactiveUtils.watch(() => state.device, () => {
+    this.addWatch(reactiveUtils.watch(() => state.device, () => {
       this.setViewPadding();
-    });
+    }));
 
-    reactiveUtils.watch(() => state.selectedParkId, () => {
+    this.addWatch(reactiveUtils.watch(() => state.selectedParkId, () => {
       this.applySelectionFilters();
       this.renderHighlights();
       this.zoomToSelection();
-    });
+    }));
 
-    reactiveUtils.watch(() => state.selectedTrailId, () => {
+    this.addWatch(reactiveUtils.watch(() => state.selectedTrailId, () => {
       this.applySelectionFilters();
       this.renderHighlights();
       this.zoomToSelection();
-    });
+    }));
 
-    reactiveUtils.watch(() => state.viewMode, async (viewMode, oldMode) => {
+    this.addWatch(reactiveUtils.watch(() => state.viewMode, async (viewMode, oldMode) => {
       if (viewMode !== oldMode) {
         await this.switchView(viewMode);
       }
-    });
+    }));
+  }
+
+  private addWatch(handle: RemovableHandle) {
+    this.watchHandles.push(handle);
+  }
+
+  private addViewHandle(handle: RemovableHandle) {
+    this.viewHandles.push(handle);
+  }
+
+  private resolveControls(): ControlRegistry {
+    const home = document.getElementById("homeControl") as HomeControl | null;
+    const zoom = document.getElementById("zoomControl") as ViewBoundControl | null;
+    const compass = document.getElementById("compassControl") as ViewBoundControl | null;
+    const navigationToggle = document.getElementById(
+      "navigationToggleControl"
+    ) as ViewBoundControl | null;
+    const basemapGallery = document.getElementById(
+      "basemapGalleryControl"
+    ) as BasemapGalleryControl | null;
+    const basemapExpand = document.getElementById(
+      "basemapExpandControl"
+    ) as ExpandControl | null;
+    const legend = document.getElementById("legendControl") as ViewBoundControl | null;
+    const legendExpand = document.getElementById(
+      "legendExpandControl"
+    ) as ExpandControl | null;
+    const all = [
+      home,
+      zoom,
+      compass,
+      navigationToggle,
+      basemapGallery,
+      basemapExpand,
+      legend,
+      legendExpand,
+    ]
+      .filter(Boolean) as ViewBoundControl[];
+
+    if (home) {
+      home.viewpoint = this.getConfiguredViewpoint();
+    }
+
+    return {
+      container: document.getElementById("mapControls"),
+      home,
+      zoom,
+      compass,
+      navigationToggle,
+      basemapGallery,
+      basemapExpand,
+      legend,
+      legendExpand,
+      all,
+    };
   }
 
   private async init() {
+    if (this.destroyed) {
+      return;
+    }
+
     try {
       await this.map.loadAll();
     } catch (error) {
       console.warn("WebMap load failed, continuing with degraded behavior.", error);
+    }
+
+    if (this.destroyed) {
+      return;
     }
 
     this.ensureGroundElevation();
@@ -126,10 +228,15 @@ export default class SceneElement {
     this.captureLayerDefaults();
     this.state.trailsLayer = this.trailsLayer;
     this.state.parksLayer = this.parksLayer;
-    this.view = this.createView(this.state.viewMode);
-    this.state.view = this.view;
+    this.normalizeActiveBasemap(this.state.viewMode);
+    await this.mountView(this.state.viewMode, this.getConfiguredViewpoint());
+
+    if (!this.view || this.destroyed) {
+      return;
+    }
+
     this.registerViewEvents();
-    this.addWidgets();
+    this.syncControlsWithView();
     this.setViewPadding();
     this.applySelectionFilters();
   }
@@ -140,47 +247,66 @@ export default class SceneElement {
     }
   }
 
-  private createView(mode: "3d" | "2d", viewpoint?: __esri.Viewpoint) {
-    const base = {
-      container: "scenePanel",
-      map: this.map,
-      ui: {
-        components: ["attribution"] as string[],
-      },
-      popupEnabled: false,
-      popup: {
-        dockEnabled: false,
-      },
-    };
+  private createViewElement(mode: "3d" | "2d", viewpoint?: __esri.Viewpoint) {
+    const tagName = mode === "2d" ? "arcgis-map" : "arcgis-scene";
+    const viewElement = document.createElement(tagName) as unknown as ArcGISViewElement;
 
-    if (mode === "2d") {
-      return new MapView({
-        ...base,
-        viewpoint,
-      });
+    viewElement.id = ACTIVE_VIEW_ELEMENT_ID;
+    viewElement.autoDestroyDisabled = true;
+    viewElement.map = this.map;
+    viewElement.popupDisabled = true;
+
+    if (viewpoint) {
+      viewElement.viewpoint = viewpoint;
     }
 
-    return new SceneView({
-      ...base,
-      constraints: {
+    if (mode === "3d") {
+      viewElement.constraints = {
         tilt: {
           max: 80,
           mode: "manual",
         },
-      },
-      environment: {
+      };
+      viewElement.environment = {
         lighting: new SunLighting({
           directShadowsEnabled: true,
         }),
         atmosphereEnabled: true,
         starsEnabled: false,
-      },
-      viewpoint,
-    });
+      };
+    }
+
+    return viewElement;
+  }
+
+  private async mountView(mode: "3d" | "2d", viewpoint?: __esri.Viewpoint) {
+    if (!this.viewHost) {
+      throw new Error("View host element #scenePanel was not found.");
+    }
+
+    const viewElement = this.createViewElement(mode, viewpoint);
+    this.viewHost.replaceChildren(viewElement);
+    this.viewElement = viewElement;
+
+    await viewElement.viewOnReady?.();
+
+    const nextView = viewElement.view ?? null;
+
+    if (
+      this.destroyed ||
+      this.state.viewMode !== mode ||
+      this.viewElement !== viewElement ||
+      !nextView
+    ) {
+      return;
+    }
+
+    this.view = nextView;
+    this.state.view = nextView;
   }
 
   private async switchView(viewMode: "3d" | "2d") {
-    if (this.isSwitchingView) {
+    if (this.isSwitchingView || this.destroyed) {
       return;
     }
 
@@ -188,18 +314,22 @@ export default class SceneElement {
     const viewpoint = this.view?.viewpoint?.clone();
 
     try {
-      if (this.view) {
-        this.view.container = null;
-        this.view.map = null;
-        this.view.destroy();
+      await this.destroyCurrentView();
+      await this.mountView(viewMode, viewpoint);
+
+      if (!this.view || this.destroyed || this.viewModeChanged(viewMode)) {
+        return;
       }
 
-      this.view = this.createView(viewMode, viewpoint);
-      this.state.view = this.view;
       this.registerViewEvents();
-      this.addWidgets();
+      this.syncControlsWithView();
       this.setViewPadding();
       await this.view.when();
+
+      if (this.destroyed || this.viewModeChanged(viewMode)) {
+        return;
+      }
+
       this.applySelectionFilters();
       this.renderHighlights();
       this.zoomToSelection();
@@ -208,64 +338,220 @@ export default class SceneElement {
     }
   }
 
-  private registerViewEvents() {
-    this.view.on("click", (event) => {
-      this.onViewClick(event);
-    });
-    (window as any).view = this.view;
+  private viewModeChanged(viewMode: "3d" | "2d") {
+    return this.state.viewMode !== viewMode || !this.view;
   }
 
-  private addWidgets() {
-    this.view.ui.empty("top-right");
-    const zoom = new Zoom({
-      view: this.view,
-    });
-    const compass = new Compass({
-      view: this.view,
-    });
-    const widgets: any[] = [zoom, compass];
-    if (this.view.type === "3d") {
-      widgets.push(
-        new NavigationToggle({
-          view: this.view as SceneView,
-        })
-      );
+  private registerViewEvents() {
+    const view = this.view;
+    if (!view) {
+      return;
     }
 
-    const basemapGallery = new BasemapGallery({
-      view: this.view,
-    });
-    const basemapExpand = new Expand({
-      view: this.view,
-      expanded: false,
-      content: basemapGallery,
-      expandIcon: "basemap",
-      mode: "floating",
+    this.removeViewHandles();
+    this.addViewHandle(
+      view.on("click", (event) => {
+        void this.onViewClick(event);
+      })
+    );
+    (window as any).view = view;
+  }
+
+  private syncControlsWithView() {
+    const view = this.view;
+
+    this.controls.all.forEach((control) => {
+      control.view = view;
     });
 
-    const home = new Home({
-      view: this.view,
-      viewpoint: US_HOME_VIEWPOINT.clone(),
+    if (this.controls.home) {
+      this.controls.home.viewpoint = this.getConfiguredViewpoint();
+    }
+
+    if (this.controls.navigationToggle) {
+      this.controls.navigationToggle.hidden = view?.type !== "3d";
+    }
+
+    this.syncBasemapGallerySource();
+    this.collapseExpandControls();
+    window.requestAnimationFrame(() => {
+      if (!this.destroyed) {
+        this.collapseExpandControls();
+      }
     });
 
-    this.view.ui.add([home, ...widgets, basemapExpand], "top-right");
+    this.controls.container?.toggleAttribute("hidden", !view);
+  }
+
+  private clearControlViews() {
+    this.controls.all.forEach((control) => {
+      control.view = null;
+    });
+
+    if (this.controls.basemapGallery) {
+      this.controls.basemapGallery.source = null;
+    }
+
+    if (this.controls.navigationToggle) {
+      this.controls.navigationToggle.hidden = true;
+    }
+
+    this.collapseExpandControls();
+
+    this.controls.container?.toggleAttribute("hidden", true);
+  }
+
+  private collapseExpandControls() {
+    [this.controls.basemapExpand, this.controls.legendExpand].forEach((control) => {
+      if (!control) {
+        return;
+      }
+
+      control.expanded = false;
+      control.removeAttribute("expanded");
+    });
+  }
+
+  private removeViewHandles() {
+    this.viewHandles.forEach((handle) => {
+      handle.remove();
+    });
+    this.viewHandles = [];
+  }
+
+  private async destroyCurrentView() {
+    const currentView = this.view;
+    const currentElement = this.viewElement;
+    if (!currentView && !currentElement) {
+      return;
+    }
+
+    this.clearControlViews();
+    this.removeViewHandles();
+    this.clearHighlights();
+
+    if ((window as any).view === currentView) {
+      (window as any).view = null;
+    }
+
+    if (this.state.view === currentView) {
+      this.state.view = null;
+    }
+
+    this.view = null;
+
+    if (currentElement) {
+      currentElement.map = null;
+      currentElement.remove();
+      await currentElement.destroy?.();
+      if (this.viewElement === currentElement) {
+        this.viewElement = null;
+      }
+      return;
+    }
+
+    currentView?.destroy();
+  }
+
+  private getBasemapSourceIds(viewType: "2d" | "3d") {
+    return config.view.basemaps[viewType].sourceIds;
+  }
+
+  private createBasemapSource(viewType: "2d" | "3d") {
+    return this.getBasemapSourceIds(viewType).map((basemapId) => {
+      return Basemap.fromId(basemapId);
+    }).filter((basemap): basemap is Basemap => Boolean(basemap));
+  }
+
+  private getAllowedBasemapIds(viewType: "2d" | "3d") {
+    return new Set(this.getBasemapSourceIds(viewType));
+  }
+
+  private getCurrentBasemapId() {
+    return this.map?.basemap?.id || this.map?.basemap?.portalItem?.id || null;
+  }
+
+  private normalizeActiveBasemap(viewType: "2d" | "3d") {
+    const activeBasemapId = this.getCurrentBasemapId();
+    if (activeBasemapId && this.getAllowedBasemapIds(viewType).has(activeBasemapId as any)) {
+      return;
+    }
+
+    const fallbackId = config.view.basemaps[viewType].defaultId;
+    this.map.basemap = Basemap.fromId(fallbackId);
+  }
+
+  private getConfiguredViewpoint() {
+    return new Viewpoint(config.view.startupViewpoint as any);
+  }
+
+  private syncBasemapGallerySource() {
+    const basemapGallery = this.controls.basemapGallery;
+    const viewType = this.view?.type;
+
+    if (!basemapGallery || !viewType) {
+      return;
+    }
+
+    basemapGallery.source = this.createBasemapSource(viewType);
+    this.normalizeActiveBasemap(viewType);
+  }
+
+  destroy() {
+    this.destroyed = true;
+    this.watchHandles.forEach((handle) => {
+      handle.remove();
+    });
+    this.watchHandles = [];
+    void this.destroyCurrentView();
+    this.clearControlViews();
+
+    if (this.map) {
+      this.map.removeMany([this.parkTrailHighlightLayer, this.highlightLayer]);
+      (this.map as any)?.destroy?.();
+    }
+
+    this.state.trailsLayer = null;
+    this.state.parksLayer = null;
   }
 
   private setViewPadding() {
-    if (!this.view) {
+    if (!this.view || !this.viewElement || this.destroyed) {
       return;
     }
-    if (this.state.device === "mobilePortrait") {
-      this.view.padding = {
-        top: 56,
-        left: 0,
-      };
-    } else {
-      this.view.padding = {
-        top: 56,
-        left: 360,
-      };
-    }
+
+    const padding =
+      this.state.device === "mobilePortrait"
+        ? {
+            top: 56,
+            right: 0,
+            bottom: 0,
+            left: 0,
+          }
+        : {
+            top: 56,
+            right: 0,
+            bottom: 0,
+            left: 360,
+          };
+
+    this.view.padding = padding;
+    this.viewElement.style.setProperty(
+      "--arcgis-layout-overlay-space-top",
+      `${padding.top}px`
+    );
+    this.viewElement.style.setProperty(
+      "--arcgis-layout-overlay-space-right",
+      `${padding.right}px`
+    );
+    this.viewElement.style.setProperty(
+      "--arcgis-layout-overlay-space-bottom",
+      `${padding.bottom}px`
+    );
+    this.viewElement.style.setProperty(
+      "--arcgis-layout-overlay-space-left",
+      `${padding.left}px`
+    );
   }
 
   private sanitizeSceneViewLabelPlacement() {
@@ -280,9 +566,9 @@ export default class SceneElement {
       }
 
       const nextLabelingInfo = labelingInfo.map((labelClass) => {
-        if (labelClass?.labelPlacement === "always-horizontal") {
+        if (layer.geometryType !== "point" && labelClass?.labelPlacement) {
           const clone = labelClass.clone();
-          clone.labelPlacement = "above-center" as any;
+          clone.labelPlacement = undefined as any;
           return clone;
         }
         return labelClass;
@@ -315,7 +601,7 @@ export default class SceneElement {
     }
 
     [this.trailsLayer, this.parksLayer, ...this.otherPolygonLayers]
-      .filter(Boolean)
+      .filter((layer): layer is FeatureLayer => Boolean(layer))
       .forEach((layer) => {
         if (!this.originalDefinitionExpressions.has(layer)) {
           this.originalDefinitionExpressions.set(layer, layer.definitionExpression || null);
@@ -479,7 +765,7 @@ export default class SceneElement {
 
     return new Polyline({
       paths: safePaths as number[][][],
-      spatialReference: sourceGeometry.spatialReference,
+      spatialReference: sourceGeometry?.spatialReference,
       hasZ: false,
     });
   }
@@ -627,6 +913,10 @@ export default class SceneElement {
   }
 
   private applySelectionFilters() {
+    if (this.destroyed) {
+      return;
+    }
+
     const hasSelectedPark =
       this.state.selectedPark?.objectId !== null &&
       this.state.selectedPark?.objectId !== undefined;
@@ -700,7 +990,7 @@ export default class SceneElement {
   }
 
   private async onViewClick(event) {
-    if (!this.state.online || (!this.trailsLayer && !this.parksLayer)) {
+    if (this.destroyed || !this.view || !this.state.online || (!this.trailsLayer && !this.parksLayer)) {
       return;
     }
 
@@ -821,6 +1111,10 @@ export default class SceneElement {
   }
 
   private renderHighlights() {
+    if (this.destroyed) {
+      return;
+    }
+
     this.clearHighlights();
     this.syncParkTrailHighlightElevation();
 
@@ -868,29 +1162,35 @@ export default class SceneElement {
   }
 
   private zoomToSelection() {
-    if (!this.view) {
+    if (!this.view || this.destroyed) {
       return;
     }
+
+    const view = this.view;
 
     if (this.state.selectedTrail?.geometry) {
       const trailGeometry =
         this.createRenderSafeTrailGeometry(this.state.selectedTrail) ||
         this.state.selectedTrail.geometry;
 
-      this.view.goTo(
-        {
-          target: trailGeometry,
-          tilt: this.view.type === "3d" ? 60 : undefined,
-        },
-        { speedFactor: 0.5 }
-      );
+      if (view.type === "3d") {
+        view.goTo(
+          {
+            target: trailGeometry,
+            tilt: 60,
+          },
+          { speedFactor: 0.5 }
+        );
+      } else {
+        view.goTo(trailGeometry, { speedFactor: 0.5 });
+      }
       return;
     }
 
     if (this.state.selectedPark?.geometry) {
       const selectedParkTrailGeometries = this.getSelectedParkTrailGeometries();
 
-      if (this.view.type === "3d" && selectedParkTrailGeometries.length > 0) {
+      if (view.type === "3d" && selectedParkTrailGeometries.length > 0) {
         const selectedParkTrailExtent = this.getCombinedExtent(selectedParkTrailGeometries);
 
         if (selectedParkTrailExtent?.center) {
@@ -900,7 +1200,7 @@ export default class SceneElement {
           );
           const scale = Math.max(90000, Math.min(maxDimension * 6, 700000));
 
-          this.view.goTo(
+          view.goTo(
             {
               target: selectedParkTrailExtent.center,
               scale,
@@ -912,16 +1212,22 @@ export default class SceneElement {
         }
       }
 
-      this.view.goTo(
-        {
-          target:
-            selectedParkTrailGeometries.length > 0
-              ? selectedParkTrailGeometries
-              : this.state.selectedPark.geometry,
-          tilt: this.view.type === "3d" ? 55 : undefined,
-        },
-        { speedFactor: 0.7 }
-      );
+      const target =
+        selectedParkTrailGeometries.length > 0
+          ? selectedParkTrailGeometries
+          : this.state.selectedPark.geometry;
+
+      if (view.type === "3d") {
+        view.goTo(
+          {
+            target,
+            tilt: 55,
+          },
+          { speedFactor: 0.7 }
+        );
+      } else {
+        view.goTo(target, { speedFactor: 0.7 });
+      }
     }
   }
 }

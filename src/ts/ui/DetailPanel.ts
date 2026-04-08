@@ -14,40 +14,69 @@
  *
  */
 
-import ElevationProfile from "@arcgis/core/widgets/ElevationProfile";
-import ElevationProfileLineGround from "@arcgis/core/widgets/ElevationProfile/ElevationProfileLineGround";
 import Graphic from "@arcgis/core/Graphic";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
-import * as geodeticLengthOperator from "@arcgis/core/geometry/operators/geodeticLengthOperator.js";
 import config from "../config";
 import { DistanceUnit, State, Trail } from "../types";
 
-import "../../style/detail-panel.scss";
+const ACTIVE_VIEW_ELEMENT_ID = "activeArcgisView";
 
-export default class SelectionPanel {
+type RemovableHandle = { remove: () => void };
+type GeodeticLengthOperatorModule = typeof import("@arcgis/core/geometry/operators/geodeticLengthOperator.js");
+type ElevationProfileElement = HTMLElement & {
+  componentOnReady?: () => Promise<unknown>;
+  destroy?: () => Promise<void>;
+  feature?: Graphic;
+  hideSelectButton?: boolean;
+  hideStartButton?: boolean;
+  hideVisualization?: boolean;
+  highlightDisabled?: boolean;
+  label?: string;
+  profiles?: __esri.CollectionProperties<__esri.ElevationProfileLineGround> | any[];
+  referenceElement?: HTMLElement | string;
+};
+
+let geodeticLengthOperatorPromise: Promise<GeodeticLengthOperatorModule> | null = null;
+
+function getGeodeticLengthOperator(): Promise<GeodeticLengthOperatorModule> {
+  if (!geodeticLengthOperatorPromise) {
+    geodeticLengthOperatorPromise = import(
+      "@arcgis/core/geometry/operators/geodeticLengthOperator.js"
+    );
+  }
+
+  return geodeticLengthOperatorPromise;
+}
+
+export default class DetailPanel {
   state: State;
   container: HTMLElement;
   detailTitle: HTMLElement;
   detailInfograph: HTMLElement;
   detailElevationProfile: HTMLElement;
   detailDescription: HTMLElement;
-  elevationProfile: ElevationProfile | null;
+  elevationProfile: ElevationProfileElement | null;
   private profileRequestId: number;
+  private watchHandles: RemovableHandle[];
+  private destroyed: boolean;
 
   constructor(state: State) {
     this.state = state;
-    this.container = document.getElementById("detailPanel");
-    this.detailTitle = document.getElementById("detailTitle");
-    this.detailInfograph = document.getElementById("detailInfograph");
-    this.detailDescription = document.getElementById("detailDescription");
+    this.container = document.getElementById("detailPanel")!;
+    this.detailTitle = document.getElementById("detailTitle")!;
+    this.detailInfograph = document.getElementById("detailInfograph")!;
+    this.detailDescription = document.getElementById("detailDescription")!;
     this.detailElevationProfile = document.getElementById(
       "detailElevationProfile"
-    );
+    )!;
+    this.elevationProfile = null;
     this.profileRequestId = 0;
+    this.watchHandles = [];
+    this.destroyed = false;
 
     this.emptyDetails();
 
-    reactiveUtils.watch(
+    this.addWatch(reactiveUtils.watch(
       () => ({
         selectedTrailId: state.selectedTrailId,
         view: state.view,
@@ -55,19 +84,37 @@ export default class SelectionPanel {
       () => {
         void this.refreshSelectedTrail();
       }
-    );
+    ));
 
-    reactiveUtils.watch(() => state.device, () => {
+    this.addWatch(reactiveUtils.watch(() => state.device, () => {
       if (
         this.state.selectedTrailId === null ||
         this.state.selectedTrailId === undefined
       ) {
         this.displayAppInfo();
       }
+    }));
+  }
+
+  private addWatch(handle: RemovableHandle) {
+    this.watchHandles.push(handle);
+  }
+
+  destroy() {
+    this.destroyed = true;
+    this.profileRequestId += 1;
+    this.watchHandles.forEach((handle) => {
+      handle.remove();
     });
+    this.watchHandles = [];
+    this.destroyElevationProfile();
   }
 
   emptyDetails() {
+    if (this.destroyed) {
+      return;
+    }
+
     this.detailTitle.textContent = "";
     this.detailDescription.textContent = "";
     this.detailInfograph.innerHTML = "";
@@ -77,6 +124,10 @@ export default class SelectionPanel {
   }
 
   displayAppInfo() {
+    if (this.destroyed) {
+      return;
+    }
+
     this.detailInfograph.innerHTML =
       '<p class="detailEmptyState">Select a park and trail to view details and the live elevation profile.</p>';
   }
@@ -109,6 +160,7 @@ export default class SelectionPanel {
     }
 
     try {
+      const geodeticLengthOperator = await getGeodeticLengthOperator();
       if (!geodeticLengthOperator.isLoaded()) {
         await geodeticLengthOperator.load();
       }
@@ -152,6 +204,10 @@ export default class SelectionPanel {
     const requestId = ++this.profileRequestId;
     const trail = this.state.selectedTrail;
 
+    if (this.destroyed) {
+      return;
+    }
+
     this.emptyDetails();
     this.destroyElevationProfile();
 
@@ -160,15 +216,24 @@ export default class SelectionPanel {
     }
 
     const metricSummary = await this.buildTrailMetricSummary(trail);
-    if (requestId !== this.profileRequestId || trail !== this.state.selectedTrail) {
+    if (
+      this.destroyed ||
+      requestId !== this.profileRequestId ||
+      trail !== this.state.selectedTrail
+    ) {
       return;
     }
 
     this.displayInfo(trail, metricSummary);
+    this.detailElevationProfile.textContent = "Loading elevation profile...";
     await this.createElevationProfile(trail, requestId);
   }
 
   displayInfo(trail: Trail, metricSummary): void {
+    if (this.destroyed) {
+      return;
+    }
+
     this.detailTitle.textContent = trail.name;
     this.createInfograph(trail, metricSummary);
     const description = [trail.description, trail.seasonalDescription].find((value) => {
@@ -182,7 +247,8 @@ export default class SelectionPanel {
 
   private destroyElevationProfile() {
     if (this.elevationProfile) {
-      this.elevationProfile.destroy();
+      void this.elevationProfile.destroy?.();
+      this.elevationProfile.remove();
       this.elevationProfile = null;
     }
   }
@@ -208,18 +274,19 @@ export default class SelectionPanel {
 
   private async createElevationProfile(trail: Trail, requestId: number) {
     this.destroyElevationProfile();
-    this.detailElevationProfile.textContent = "";
     const view = this.state.view;
     const inputGraphic = this.createProfileInputGraphic(trail);
 
-    if (!view || !inputGraphic) {
+    if (this.destroyed || !view || !inputGraphic) {
       this.detailElevationProfile.textContent =
         "Elevation profile is unavailable for the current trail selection.";
       return;
     }
 
     try {
-      await view.when();
+      if (!(view as any).ready) {
+        await view.when();
+      }
     } catch {
       this.detailElevationProfile.textContent =
         "Elevation profile is still loading. Try the selection again once the map finishes initializing.";
@@ -227,6 +294,7 @@ export default class SelectionPanel {
     }
 
     if (
+      this.destroyed ||
       requestId !== this.profileRequestId ||
       trail !== this.state.selectedTrail ||
       view !== this.state.view
@@ -234,41 +302,41 @@ export default class SelectionPanel {
       return;
     }
 
-    const container = document.createElement("div");
-    this.detailElevationProfile.replaceChildren(container);
-
     try {
-      const elevationProfile = new ElevationProfile({
-        view,
-        input: inputGraphic,
-        container,
-        profiles: [
-          new ElevationProfileLineGround({
-            title: "Trail statistics",
-            color: config.colors.selectedTrail,
-          }),
-        ],
-        visibleElements: {
-          selectButton: false,
-          sketchButton: false,
-        },
-      });
-
-      await elevationProfile.when();
+      const elevationProfile = document.createElement(
+        "arcgis-elevation-profile"
+      ) as unknown as ElevationProfileElement;
+      elevationProfile.label = "Trail elevation profile";
+      this.detailElevationProfile.replaceChildren(elevationProfile);
+      await elevationProfile.componentOnReady?.();
 
       if (
+        this.destroyed ||
         requestId !== this.profileRequestId ||
         trail !== this.state.selectedTrail ||
         view !== this.state.view
       ) {
-        elevationProfile.destroy();
+        void elevationProfile.destroy?.();
+        elevationProfile.remove();
         return;
       }
+
+      elevationProfile.referenceElement = ACTIVE_VIEW_ELEMENT_ID;
+      elevationProfile.hideSelectButton = true;
+      elevationProfile.hideStartButton = true;
+      elevationProfile.highlightDisabled = true;
+      elevationProfile.feature = inputGraphic;
+      elevationProfile.profiles = [
+        {
+          type: "ground",
+          title: "Trail statistics",
+          color: config.colors.selectedTrail,
+        },
+      ];
 
       this.elevationProfile = elevationProfile;
     } catch (error) {
       console.warn("Elevation profile could not be created for the selected trail.", error);
-      container.remove();
       this.destroyElevationProfile();
       this.detailElevationProfile.textContent =
         "Elevation profile could not be created for this trail.";
@@ -276,32 +344,26 @@ export default class SelectionPanel {
   }
 
   createInfograph(trail, metricSummary) {
-    const status = {
-      Closed: {
-        icon: "fa fa-calendar-times-o",
-        text: "Closed",
-      },
-      Open: {
-        icon: "fa fa-calendar-check-o",
-        text: "Open",
-      },
+    const statusLabels = {
+      Closed: "Closed",
+      Open: "Open",
     };
-    const statusInfo = status[trail.status] || null;
+    const statusText = statusLabels[trail.status] || null;
     const primaryFacts = [
       metricSummary?.lengthText
-        ? `<span class="infograph"><span class="fa fa-arrows-h" aria-hidden="true"></span> ${metricSummary.lengthText}</span>`
+        ? `<span class="infograph">${metricSummary.lengthText}</span>`
         : "",
       metricSummary?.gainText
-        ? `<span class="infograph"><span class="fa fa-line-chart" aria-hidden="true"></span> ${metricSummary.gainText}</span>`
+        ? `<span class="infograph">${metricSummary.gainText}</span>`
         : "",
       this.isMeaningful(trail.difficulty)
-        ? `<span class="infograph"><span class="fa fa-wrench" aria-hidden="true"></span> ${trail.difficulty}</span>`
+        ? `<span class="infograph">${trail.difficulty}</span>`
         : "",
       trail.walktime
-        ? `<span class="infograph"><span class="fa fa-clock-o" aria-hidden="true"></span> ${trail.walktime} hr</span>`
+        ? `<span class="infograph">${trail.walktime} hr</span>`
         : "",
-      trail.status && statusInfo
-        ? `<span class="infograph"><span class="${statusInfo.icon}" aria-hidden="true"></span> ${statusInfo.text}</span>`
+      trail.status && statusText
+        ? `<span class="infograph">${statusText}</span>`
         : "",
     ].filter(Boolean);
 
