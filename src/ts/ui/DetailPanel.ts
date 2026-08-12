@@ -37,6 +37,7 @@ type ElevationProfileElement = HTMLElement & {
 };
 
 let geodeticLengthOperatorPromise: Promise<GeodeticLengthOperatorModule> | null = null;
+let elevationProfileComponentPromise: Promise<unknown> | null = null;
 
 function getGeodeticLengthOperator(): Promise<GeodeticLengthOperatorModule> {
   if (!geodeticLengthOperatorPromise) {
@@ -46,6 +47,16 @@ function getGeodeticLengthOperator(): Promise<GeodeticLengthOperatorModule> {
   }
 
   return geodeticLengthOperatorPromise;
+}
+
+function ensureElevationProfileComponent(): Promise<unknown> {
+  if (!elevationProfileComponentPromise) {
+    elevationProfileComponentPromise = import(
+      "@arcgis/map-components/components/arcgis-elevation-profile"
+    );
+  }
+
+  return elevationProfileComponentPromise;
 }
 
 export default class DetailPanel {
@@ -303,6 +314,17 @@ export default class DetailPanel {
     }
 
     try {
+      await ensureElevationProfileComponent();
+
+      if (
+        this.destroyed ||
+        requestId !== this.profileRequestId ||
+        trail !== this.state.selectedTrail ||
+        view !== this.state.view
+      ) {
+        return;
+      }
+
       const elevationProfile = document.createElement(
         "arcgis-elevation-profile"
       ) as unknown as ElevationProfileElement;

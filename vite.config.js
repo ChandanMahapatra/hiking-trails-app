@@ -94,6 +94,23 @@ function serveComponentAssetsPlugin() {
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        const pathname = req.url ? decodeURIComponent(req.url.split('?')[0]) : ''
+
+        if (pathname === '/installHook.js.map') {
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(
+            JSON.stringify({
+              version: 3,
+              file: 'installHook.js',
+              sources: [],
+              names: [],
+              mappings: ''
+            })
+          )
+          return
+        }
+
         const filePath = req.url ? resolveAssetRequest(req.url) : null
         if (!filePath) {
           return next()
@@ -162,6 +179,16 @@ export default defineConfig(({ command }) => {
     optimizeDeps: {
       include: [
         '@arcgis/common-components',
+        '@arcgis/map-components/components/arcgis-basemap-gallery',
+        '@arcgis/map-components/components/arcgis-compass',
+        '@arcgis/map-components/components/arcgis-elevation-profile',
+        '@arcgis/map-components/components/arcgis-expand',
+        '@arcgis/map-components/components/arcgis-home',
+        '@arcgis/map-components/components/arcgis-legend',
+        '@arcgis/map-components/components/arcgis-map',
+        '@arcgis/map-components/components/arcgis-navigation-toggle',
+        '@arcgis/map-components/components/arcgis-scene',
+        '@arcgis/map-components/components/arcgis-zoom',
         '@arcgis/map-components',
         '@esri/calcite-components'
       ]

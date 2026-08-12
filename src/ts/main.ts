@@ -32,19 +32,47 @@ import ConnectionManager from "./ui/ConnectionManager";
 import deviceUtils from "./ui/deviceUtils";
 import MenuPanel from "./ui/MenuPanel";
 
-const registerMapComponents = async () => {
-  await Promise.all([
-    import("@arcgis/map-components/components/arcgis-map"),
-    import("@arcgis/map-components/components/arcgis-scene"),
-    import("@arcgis/map-components/components/arcgis-basemap-gallery"),
-    import("@arcgis/map-components/components/arcgis-compass"),
-    import("@arcgis/map-components/components/arcgis-elevation-profile"),
-    import("@arcgis/map-components/components/arcgis-expand"),
-    import("@arcgis/map-components/components/arcgis-home"),
-    import("@arcgis/map-components/components/arcgis-legend"),
-    import("@arcgis/map-components/components/arcgis-navigation-toggle"),
-    import("@arcgis/map-components/components/arcgis-zoom"),
-  ]);
+const componentImporters = {
+  "arcgis-basemap-gallery": () => import("@arcgis/map-components/components/arcgis-basemap-gallery"),
+  "arcgis-compass": () => import("@arcgis/map-components/components/arcgis-compass"),
+  "arcgis-expand": () => import("@arcgis/map-components/components/arcgis-expand"),
+  "arcgis-home": () => import("@arcgis/map-components/components/arcgis-home"),
+  "arcgis-legend": () => import("@arcgis/map-components/components/arcgis-legend"),
+  "arcgis-map": () => import("@arcgis/map-components/components/arcgis-map"),
+  "arcgis-navigation-toggle": () => import("@arcgis/map-components/components/arcgis-navigation-toggle"),
+  "arcgis-scene": () => import("@arcgis/map-components/components/arcgis-scene"),
+  "arcgis-zoom": () => import("@arcgis/map-components/components/arcgis-zoom"),
+} as const;
+
+type ArcgisComponentName = keyof typeof componentImporters;
+
+const criticalMapComponents: ArcgisComponentName[] = [
+  "arcgis-map",
+  "arcgis-scene",
+  "arcgis-home",
+  "arcgis-zoom",
+  "arcgis-compass",
+  "arcgis-navigation-toggle",
+  "arcgis-expand",
+];
+const deferredMapComponents: ArcgisComponentName[] = [
+  "arcgis-basemap-gallery",
+  "arcgis-legend",
+];
+const componentRegistrationPromises = new Map<ArcgisComponentName, Promise<unknown>>();
+
+const registerMapComponents = async (componentNames: ArcgisComponentName[]) => {
+  await Promise.all(
+    componentNames.map((componentName) => {
+      let registrationPromise = componentRegistrationPromises.get(componentName);
+      if (!registrationPromise) {
+        registrationPromise = componentImporters[componentName]();
+        componentRegistrationPromises.set(componentName, registrationPromise);
+      }
+
+      return registrationPromise;
+    })
+  );
 };
 
 const configureComponentAssets = () => {
@@ -66,12 +94,16 @@ const sleep = (delayMs: number) => {
 const startApp = async () => {
   configureComponentAssets();
   defineCustomElements(window);
-  await registerMapComponents();
+  await registerMapComponents(criticalMapComponents);
 
   const state = new State();
   deviceUtils.init(state);
   const connectionManager = new ConnectionManager(state);
   const sceneElement = new SceneElement(state);
+
+  void registerMapComponents(deferredMapComponents).catch((error) => {
+    console.warn("Deferred map component registration failed.", error);
+  });
 
   let uiInitialized = false;
   let isDisposed = false;

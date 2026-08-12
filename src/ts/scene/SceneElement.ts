@@ -56,7 +56,7 @@ type ViewBoundControl = HTMLElement & {
   hidden?: boolean;
 };
 type BasemapGalleryControl = ViewBoundControl & {
-  source?: Basemap[] | null;
+  source?: Basemap[];
 };
 type HomeControl = ViewBoundControl & {
   viewpoint?: __esri.Viewpoint | null;
@@ -398,10 +398,6 @@ export default class SceneElement {
     this.controls.all.forEach((control) => {
       control.view = null;
     });
-
-    if (this.controls.basemapGallery) {
-      this.controls.basemapGallery.source = null;
-    }
 
     if (this.controls.navigationToggle) {
       this.controls.navigationToggle.hidden = true;
@@ -1032,7 +1028,9 @@ export default class SceneElement {
           : config.colors.selectedParkOutline,
         width: hasTrail
           ? mutedOutlineWidth
-          : config.selection.parkOutlineWidth,
+          : this.view?.type === "3d"
+            ? config.selection.parkOutlineWidth + 1
+            : config.selection.parkOutlineWidth,
       },
     } as any;
   }
@@ -1108,8 +1106,41 @@ export default class SceneElement {
     } as any;
   }
 
+  private getPreferredSpatialReference() {
+    return (
+      this.view?.spatialReference ||
+      this.state.view?.spatialReference ||
+      this.trailsLayer?.spatialReference ||
+      this.parksLayer?.spatialReference ||
+      null
+    );
+  }
+
+  private ensureGeometrySpatialReference<T extends __esri.Geometry>(
+    geometry: T | null | undefined
+  ) {
+    if (!geometry) {
+      return null;
+    }
+
+    if (geometry.spatialReference) {
+      return geometry;
+    }
+
+    const spatialReference = this.getPreferredSpatialReference();
+    if (!spatialReference) {
+      return null;
+    }
+
+    const clonedGeometry = geometry.clone() as T;
+    clonedGeometry.spatialReference = spatialReference;
+    return clonedGeometry;
+  }
+
   private createRenderSafeTrailGeometry(trail: Trail | null | undefined) {
     const sourceGeometry = trail?.geometry;
+    const spatialReference =
+      sourceGeometry?.spatialReference || this.getPreferredSpatialReference();
     const paths = sourceGeometry?.paths || [];
     const safePaths = paths
       .map((path) => {
@@ -1137,7 +1168,7 @@ export default class SceneElement {
 
     return new Polyline({
       paths: safePaths as number[][][],
-      spatialReference: sourceGeometry?.spatialReference,
+      spatialReference,
       hasZ: false,
     });
   }
@@ -1163,7 +1194,8 @@ export default class SceneElement {
   private getParkTrailElevationInfo() {
     return this.view?.type === "3d"
       ? ({
-          mode: "on-the-ground",
+          mode: "relative-to-ground",
+          offset: config.selection.trailSourceSelectionLift3d,
         } as const)
       : null;
   }
@@ -1490,12 +1522,18 @@ export default class SceneElement {
     this.syncParkTrailHighlightElevation();
 
     if (this.state.selectedPark) {
+      const selectedParkGeometry = this.ensureGeometrySpatialReference(
+        this.state.selectedPark.geometry
+      );
+
+      if (selectedParkGeometry) {
       this.highlightLayer.add(
         new Graphic({
-          geometry: this.state.selectedPark.geometry,
+          geometry: selectedParkGeometry,
           symbol: this.createParkHighlightSymbol(!!this.state.selectedTrail),
         })
       );
+      }
     }
 
     if (this.state.selectedPark && !this.state.selectedTrail) {
@@ -1521,14 +1559,16 @@ export default class SceneElement {
     if (this.state.selectedTrail) {
       const trailGeometry =
         this.createRenderSafeTrailGeometry(this.state.selectedTrail) ||
-        this.state.selectedTrail.geometry;
+        this.ensureGeometrySpatialReference(this.state.selectedTrail.geometry);
 
-      this.highlightLayer.add(
-        new Graphic({
-          geometry: trailGeometry,
-          symbol: this.createSelectedTrailSymbol(this.state.selectedTrail),
-        })
-      );
+      if (trailGeometry) {
+        this.highlightLayer.add(
+          new Graphic({
+            geometry: trailGeometry,
+            symbol: this.createSelectedTrailSymbol(this.state.selectedTrail),
+          })
+        );
+      }
     }
   }
 

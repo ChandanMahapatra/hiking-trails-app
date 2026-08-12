@@ -71,6 +71,7 @@ export default {
     parkOutlineWidth: 4,
     parkOutlineMutedWidth: 2,
     parkOutlineMutedOpacity: 0.4,
+    trailSourceSelectionLift3d: 1.5,
     trailSourceSelectionWidth3d: 4,
     trailSourceSelectionWidth2d: 2,
     trailWallWidth: 3,

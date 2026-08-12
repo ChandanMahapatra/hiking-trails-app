@@ -1,5 +1,6 @@
 {
     "compilerOptions": {
+        "rootDir": "./src/ts",
         "outDir": "./dist/",
         "sourceMap": true,
         "noImplicitAny": false,
