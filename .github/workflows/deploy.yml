@@ -3,7 +3,10 @@ name: Deploy GitHub Pages
 on:
   push:
     branches:
-      - main
+      - master
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
@@ -29,6 +32,7 @@ jobs:
           cache: npm
 
       - name: Setup Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
 
       - name: Install dependencies
@@ -38,14 +42,18 @@ jobs:
         run: npm run type-check
 
       - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

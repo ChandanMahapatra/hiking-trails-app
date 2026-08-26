@@ -139,8 +139,11 @@ export default class DetailPanel {
       return;
     }
 
-    this.detailInfograph.innerHTML =
-      '<p class="detailEmptyState">Select a park and trail to view details and the live elevation profile.</p>';
+    const emptyState = document.createElement("p");
+    emptyState.className = "detailEmptyState";
+    emptyState.textContent =
+      "Select a park and trail to view details and the live elevation profile.";
+    this.detailInfograph.replaceChildren(emptyState);
   }
 
   private isMeaningful(value?: string | number | null): boolean {
@@ -371,48 +374,56 @@ export default class DetailPanel {
       Open: "Open",
     };
     const statusText = statusLabels[trail.status] || null;
-    const primaryFacts = [
-      metricSummary?.lengthText
-        ? `<span class="infograph">${metricSummary.lengthText}</span>`
-        : "",
-      metricSummary?.gainText
-        ? `<span class="infograph">${metricSummary.gainText}</span>`
-        : "",
-      this.isMeaningful(trail.difficulty)
-        ? `<span class="infograph">${trail.difficulty}</span>`
-        : "",
-      trail.walktime
-        ? `<span class="infograph">${trail.walktime} hr</span>`
-        : "",
-      trail.status && statusText
-        ? `<span class="infograph">${statusText}</span>`
-        : "",
-    ].filter(Boolean);
+    const createFact = (value: unknown) => {
+      const fact = document.createElement("span");
+      fact.className = "infograph";
+      fact.textContent = String(value);
+      return fact;
+    };
+    const primaryFactValues = [
+      metricSummary?.lengthText,
+      metricSummary?.gainText,
+      this.isMeaningful(trail.difficulty) ? trail.difficulty : null,
+      trail.walktime ? `${trail.walktime} hr` : null,
+      trail.status && statusText ? statusText : null,
+    ].filter((value) => value !== null && value !== undefined && value !== "");
 
-    const attributeRows = [
-      this.isMeaningful(trail.surface)
-        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Surface</span><span class="detailAttributeValue">${trail.surface}</span></div>`
-        : "",
-      this.isMeaningful(trail.trailUse)
-        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Use</span><span class="detailAttributeValue">${trail.trailUse}</span></div>`
-        : "",
-      this.isMeaningful(trail.trailType)
-        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Type</span><span class="detailAttributeValue">${trail.trailType}</span></div>`
-        : "",
-      this.isMeaningful(trail.trailClass)
-        ? `<div class="detailAttribute"><span class="detailAttributeLabel">Class</span><span class="detailAttributeValue">${trail.trailClass}</span></div>`
-        : "",
-    ].filter(Boolean);
+    const attributeValues = [
+      ["Surface", trail.surface],
+      ["Use", trail.trailUse],
+      ["Type", trail.trailType],
+      ["Class", trail.trailClass],
+    ].filter(([, value]) => this.isMeaningful(value as string | number | null));
 
-    const sections = [
-      primaryFacts.length
-        ? `<div class="detailFacts detailFacts--primary">${primaryFacts.join("")}</div>`
-        : "",
-      attributeRows.length
-        ? `<div class="detailFacts detailFacts--secondary">${attributeRows.join("")}</div>`
-        : "",
-    ].filter(Boolean);
+    const sections: HTMLElement[] = [];
+    if (primaryFactValues.length) {
+      const primaryFacts = document.createElement("div");
+      primaryFacts.className = "detailFacts detailFacts--primary";
+      primaryFacts.append(...primaryFactValues.map(createFact));
+      sections.push(primaryFacts);
+    }
 
-    this.detailInfograph.innerHTML = sections.join("");
+    if (attributeValues.length) {
+      const secondaryFacts = document.createElement("div");
+      secondaryFacts.className = "detailFacts detailFacts--secondary";
+      attributeValues.forEach(([label, value]) => {
+        const row = document.createElement("div");
+        row.className = "detailAttribute";
+
+        const labelElement = document.createElement("span");
+        labelElement.className = "detailAttributeLabel";
+        labelElement.textContent = String(label);
+
+        const valueElement = document.createElement("span");
+        valueElement.className = "detailAttributeValue";
+        valueElement.textContent = String(value);
+
+        row.append(labelElement, valueElement);
+        secondaryFacts.append(row);
+      });
+      sections.push(secondaryFacts);
+    }
+
+    this.detailInfograph.replaceChildren(...sections);
   }
 }

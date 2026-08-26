@@ -6,7 +6,6 @@
   <meta http-equiv='X-UA-Compatible' content='IE=edge'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
 
-  <meta name='theme-color' content='#b5e2c1'>
   <meta name='description' content='Explore hiking trails across U.S. National Parks in 3D and 2D with live trail details and elevation profiles.'>
   <meta name='author' content='Raluca Nicola, ESRI'>
 
@@ -46,13 +45,13 @@
     <div class="headerActions">
       <calcite-label layout="inline" class="viewModeControl">
         3D
-        <calcite-switch id="viewModeToggle"></calcite-switch>
+        <calcite-switch id="viewModeToggle" label="Switch between 3D and 2D map views"></calcite-switch>
         2D
       </calcite-label>
     </div>
   </header>
 
-  <div id='scenePanel'></div>
+  <main id='scenePanel' aria-label='Interactive hiking trail map'></main>
   <div id="mapControls" class="mapControls" aria-label="Map controls" hidden>
     <arcgis-home id="homeControl" label="Home"></arcgis-home>
     <arcgis-zoom id="zoomControl" label="Zoom"></arcgis-zoom>
@@ -78,7 +77,7 @@
     </arcgis-expand>
   </div>
 
-  <div class='menuPanel'>
+  <aside class='menuPanel' aria-label='Park and trail selection'>
     <h2 class='panelTitle'>Parks and Trails</h2>
 
     <div id='selectionPanel' class='panel'>
@@ -104,7 +103,7 @@
       </div>
     </div>
 
-  </div>
+  </aside>
 </body>
 
 </html>
