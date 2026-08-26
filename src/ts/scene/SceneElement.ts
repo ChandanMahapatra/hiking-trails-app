@@ -239,6 +239,11 @@ export default class SceneElement {
     this.state.trailsLayer = this.trailsLayer;
     this.state.parksLayer = this.parksLayer;
     this.normalizeActiveBasemap(this.state.viewMode);
+
+    if (!this.supportsWebGL2()) {
+      return;
+    }
+
     await this.mountView(this.state.viewMode, this.getConfiguredViewpoint(this.state.viewMode));
 
     if (!this.view || this.destroyed) {
@@ -316,7 +321,7 @@ export default class SceneElement {
   }
 
   private async switchView(viewMode: "3d" | "2d") {
-    if (this.isSwitchingView || this.destroyed) {
+    if (this.isSwitchingView || this.destroyed || !this.supportsWebGL2()) {
       return;
     }
 
@@ -357,6 +362,14 @@ export default class SceneElement {
 
   private viewModeChanged(viewMode: "3d" | "2d") {
     return this.state.viewMode !== viewMode || !this.view;
+  }
+
+  private supportsWebGL2() {
+    try {
+      return Boolean(document.createElement("canvas").getContext("webgl2"));
+    } catch {
+      return false;
+    }
   }
 
   private registerViewEvents() {
