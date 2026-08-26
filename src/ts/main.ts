@@ -100,6 +100,10 @@ const startApp = async () => {
   deviceUtils.init(state);
   const connectionManager = new ConnectionManager(state);
   const sceneElement = new SceneElement(state);
+  const mapUnavailable = document.getElementById("mapUnavailable");
+  const reloadMapButton = document.getElementById("reloadMapButton");
+
+  reloadMapButton?.addEventListener("click", () => window.location.reload());
 
   void registerMapComponents(deferredMapComponents).catch((error) => {
     console.warn("Deferred map component registration failed.", error);
@@ -167,10 +171,20 @@ const startApp = async () => {
     deviceUtils.destroy();
   };
 
-  void initializeUi();
+  void initializeUi().then(async () => {
+    try {
+      await sceneElement.ready;
+    } catch (error) {
+      console.warn("Scene initialization failed, continuing with degraded behavior.", error);
+      mapUnavailable?.removeAttribute("hidden");
+    }
 
-  sceneElement.ready.catch((error) => {
-    console.warn("Scene initialization failed, continuing with degraded behavior.", error);
+    if (
+      !isDisposed &&
+      ((state.parks?.length || 0) === 0 || (state.trails?.length || 0) === 0)
+    ) {
+      await initializeUi();
+    }
   });
 };
 
