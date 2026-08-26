@@ -13,3 +13,44 @@
   inset: 0;
   display: block;
 }
+
+.mapUnavailable {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: calc(50% + 180px);
+  width: min(420px, calc(100vw - 420px));
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  padding: 28px;
+  text-align: center;
+  background: var(--calcite-ui-foreground-1, #fff);
+  border: 1px solid var(--calcite-ui-border-2, #b3b3b3);
+  box-shadow: var(--calcite-shadow-2, 0 2px 8px rgba(0, 0, 0, 0.16));
+}
+
+.mapUnavailable[hidden] {
+  display: none;
+}
+
+.mapUnavailable calcite-icon {
+  color: var(--calcite-ui-warning, #a86400);
+}
+
+.mapUnavailable h2 {
+  margin: 12px 0 8px;
+  font-size: var(--calcite-font-size-1, 1.25rem);
+}
+
+.mapUnavailable p {
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .mapUnavailable {
+    top: 40%;
+    left: 50%;
+    width: calc(100vw - 32px);
+  }
+}
