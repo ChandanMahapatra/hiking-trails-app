@@ -174,6 +174,9 @@ const startApp = async () => {
   void initializeUi().then(async () => {
     try {
       await sceneElement.ready;
+      if (!state.view) {
+        mapUnavailable?.removeAttribute("hidden");
+      }
     } catch (error) {
       console.warn("Scene initialization failed, continuing with degraded behavior.", error);
       mapUnavailable?.removeAttribute("hidden");
