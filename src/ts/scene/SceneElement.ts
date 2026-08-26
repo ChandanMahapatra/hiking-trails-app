@@ -346,6 +346,12 @@ export default class SceneElement {
       this.zoomToSelection();
     } finally {
       this.isSwitchingView = false;
+
+      // A second toggle can arrive while a view is mounting. Reconcile with
+      // the latest requested mode instead of dropping that interaction.
+      if (!this.destroyed && this.view?.type !== this.state.viewMode) {
+        void this.switchView(this.state.viewMode);
+      }
     }
   }
 

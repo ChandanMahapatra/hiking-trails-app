@@ -105,8 +105,9 @@ h1 {
   padding: 0 30px;
 }
 
-*:focus {
-  outline: none;
+*:focus-visible {
+  outline: 3px solid var(--calcite-ui-focus-color, #00619b);
+  outline-offset: 2px;
 }
 
 .share {
@@ -211,7 +212,7 @@ h1 {
 
 .connectionMessage {
   position: absolute;
-  top: 0;
+  top: 68px;
   left: 50%;
   margin-left: -170px;
   width: 300px;
@@ -310,6 +311,7 @@ b {
   inline-size: 100%;
   overflow: hidden;
   padding: 8px;
+  box-sizing: border-box;
   background: var(--calcite-ui-foreground-1, rgba(255, 255, 255, 0.96));
 }
 

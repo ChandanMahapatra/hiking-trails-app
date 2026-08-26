@@ -39,6 +39,9 @@ export default class ConnectionManager {
     this.messageContainer = document.body.appendChild(
       document.createElement("div")
     );
+    this.messageContainer.setAttribute("role", "status");
+    this.messageContainer.setAttribute("aria-live", "polite");
+    this.messageContainer.setAttribute("aria-atomic", "true");
 
     this.watchHandles.push(reactiveUtils.watch(() => state.online, (value) => {
       if (!value) {

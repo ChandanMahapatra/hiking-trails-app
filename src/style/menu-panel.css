@@ -37,10 +37,12 @@
   .menuPanel {
     display: flex;
     position: absolute;
-    top: 56px;
+    top: auto;
+    bottom: 0;
     width: 100%;
     height: auto;
-    max-height: calc(100% - 56px);
+    max-height: min(62vh, calc(100% - 56px));
+    border-top: 1px solid var(--calcite-ui-border-2, rgba(100, 100, 100, 0.75));
   }
 
   .menuPanel .panel {
