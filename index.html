@@ -51,14 +51,13 @@
     </div>
   </header>
 
-  <main id='scenePanel' aria-label='Interactive hiking trail map'>
-    <section id="mapUnavailable" class="mapUnavailable" role="alert" hidden>
-      <calcite-icon icon="exclamation-mark-triangle" scale="l" aria-hidden="true"></calcite-icon>
-      <h2>Map unavailable in this browser</h2>
-      <p>The interactive map needs WebGL 2 and hardware acceleration. Try reloading, updating your browser, or enabling hardware acceleration.</p>
-      <calcite-button id="reloadMapButton" appearance="outline" icon-start="refresh">Reload map</calcite-button>
-    </section>
-  </main>
+  <main id='scenePanel' aria-label='Interactive hiking trail map'></main>
+  <section id="mapUnavailable" class="mapUnavailable" role="alert" hidden>
+    <calcite-icon icon="exclamation-mark-triangle" scale="l" aria-hidden="true"></calcite-icon>
+    <h2>Map unavailable in this browser</h2>
+    <p>The interactive map needs WebGL 2 and hardware acceleration. Try reloading, updating your browser, or enabling hardware acceleration.</p>
+    <calcite-button id="reloadMapButton" appearance="outline" icon-start="refresh">Reload map</calcite-button>
+  </section>
   <div id="mapControls" class="mapControls" aria-label="Map controls" hidden>
     <arcgis-home id="homeControl" label="Home"></arcgis-home>
     <arcgis-zoom id="zoomControl" label="Zoom"></arcgis-zoom>
